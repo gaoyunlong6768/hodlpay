@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f2ede2;
+  --paper-2: #e9e2d3;
+  --ink: #16140f;
+  --ink-soft: #5c574c;
+  --rule: #cfc6b3;
+  --mint: #0f7b5a;
+  --amber: #c07a12;
+  --vermilion: #d2401e;
+  --tempo: #2748d8;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-rule: var(--rule);
+  --color-mint: var(--mint);
+  --color-amber: var(--amber);
+  --color-vermilion: var(--vermilion);
+  --color-tempo: var(--tempo);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-plex-sans), ui-sans-serif, sans-serif;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(15, 123, 90, 0.07), transparent 40%),
+    radial-gradient(circle at 88% 30%, rgba(210, 64, 30, 0.06), transparent 45%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.receipt {
+  background: #fbf8f1;
+  position: relative;
+  box-shadow:
+    0 1px 0 var(--rule),
+    0 18px 40px -24px rgba(22, 20, 15, 0.35);
+}
+
+.receipt-edge {
+  -webkit-mask: radial-gradient(circle 6px at 50% 0, transparent 98%, #000) 0 0 / 16px 100%;
+  mask: radial-gradient(circle 6px at 50% 0, transparent 98%, #000) 0 0 / 16px 100%;
+}
+
+.dash {
+  border-top: 1px dashed var(--rule);
+}
+
+.num {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes print {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.print {
+  animation: print 0.9s steps(18) both;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(210, 64, 30, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(210, 64, 30, 0);
+  }
+}
+
+.alarm {
+  animation: pulse-ring 1.4s ease-out infinite;
+}
+
+input[type="range"] {
+  accent-color: var(--ink);
+}
