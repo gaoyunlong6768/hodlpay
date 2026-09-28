@@ -1,0 +1,9 @@
+{
+  "cluster": "localnet",
+  "rpc": "http://127.0.0.1:8899",
+  "programId": "5WWDSNYRjmU3Jp7DywyYgDYtYiBBZ3e8JmcBgS2HxihH",
+  "usdcMint": "3PD9ixqrcHJKSo8J3DK6HYrTAu57qHPF5uiy26Jc9hVX",
+  "zecMint": "JAi8XjMTfFMkEm3TNh84hXaPpeUouF1gxqvraP1NVojM",
+  "solMint": "So11111111111111111111111111111111111111112",
+  "tempoBridge": "B2k2U5kYqMS986ZppeN74QpgHbRgbcLm2Bj6wDG4ceY7"
+}

@@ -18,6 +18,9 @@ pub const POSITION_SEED: &[u8] = b"position";
 #[constant]
 pub const LOAN_SEED: &[u8] = b"loan";
 
+#[constant]
+pub const LP_MINT_SEED: &[u8] = b"lp_mint";
+
 /// Collateral slots per position.
 pub const MAX_ASSETS: usize = 4;
 

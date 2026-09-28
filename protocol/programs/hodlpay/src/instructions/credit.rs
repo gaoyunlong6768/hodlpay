@@ -94,6 +94,7 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
     loan.installments_total = installments;
     loan.installments_paid = 0;
     loan.repaid = 0;
+    loan.late_fees_paid = 0;
     loan.created_at = now;
     loan.next_due_at = now;
     loan.bump = ctx.bumps.loan;
@@ -102,6 +103,7 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
     p.debt = new_debt;
     p.loan_count += 1;
     ctx.accounts.config.total_debt += amount;
+    ctx.accounts.config.fees_earned += fee;
 
     emit!(CheckoutEvent {
         owner: p.owner,
@@ -140,13 +142,17 @@ pub struct Repay<'info> {
 }
 
 /// Pays the next installment. Any credit left by a liquidation is applied first.
+/// Past the grace period a late fee is added, paid in cash to liquidity providers.
 pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     let due = ctx.accounts.loan.next_installment()?;
+    let now = Clock::get()?.unix_timestamp;
+    let late = now > ctx.accounts.loan.next_due_at + ctx.accounts.config.grace_period;
+    let late_fee = if late { apply_bps(due, ctx.accounts.config.late_fee_bps) } else { 0 };
     let p = &mut ctx.accounts.position;
     let from_credit = due.min(p.credit_balance);
     let cash = due - from_credit;
 
-    if cash > 0 {
+    if cash + late_fee > 0 {
         token::transfer(
             CpiContext::new(
                 token::ID,
@@ -156,7 +162,7 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
                     authority: ctx.accounts.owner.to_account_info(),
                 },
             ),
-            cash,
+            cash + late_fee,
         )?;
     }
 
@@ -164,10 +170,12 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     p.debt = p.debt.saturating_sub(cash);
     let config = &mut ctx.accounts.config;
     config.total_debt = config.total_debt.saturating_sub(cash);
+    config.fees_earned += late_fee;
 
     let loan = &mut ctx.accounts.loan;
     loan.installments_paid += 1;
     loan.repaid += due;
+    loan.late_fees_paid += late_fee;
     loan.next_due_at += config.installment_interval;
 
     emit!(RepayEvent {
@@ -176,6 +184,7 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
         installment: loan.installments_paid,
         paid: cash,
         from_credit,
+        late_fee,
     });
     Ok(())
 }

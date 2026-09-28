@@ -27,6 +27,8 @@ const DAY: i64 = 86_400;
 struct Env {
     svm: LiteSVM,
     admin: Keypair,
+    admin_usdc: Pubkey,
+    admin_lp: Pubkey,
     usdc: Pubkey,
     sol: Pubkey,
     zec: Pubkey,
@@ -83,6 +85,8 @@ fn setup() -> Env {
                     installments: 4,
                     installment_interval: 14 * DAY,
                     max_price_age: 300,
+                    late_fee_bps: 100,
+                    grace_period: 3 * DAY,
                 },
             },
             hodlpay::accounts::Initialize {
@@ -90,6 +94,7 @@ fn setup() -> Env {
                 config,
                 usdc_mint: usdc,
                 liquidity_vault: pda(&[LIQUIDITY_SEED]),
+                lp_mint: pda(&[LP_MINT_SEED]),
                 token_program: anchor_spl::token::ID,
                 system_program: anchor_lang::system_program::ID,
             },
@@ -131,25 +136,30 @@ fn setup() -> Env {
     }
 
     let admin_usdc = CreateAssociatedTokenAccount::new(&mut svm, &admin, &usdc).send().unwrap();
+    let admin_lp = CreateAssociatedTokenAccount::new(&mut svm, &admin, &pda(&[LP_MINT_SEED])).send().unwrap();
     MintTo::new(&mut svm, &admin, &usdc, &admin_usdc, 100_000 * USDC).send().unwrap();
-    send(
-        &mut svm,
-        ix(
-            hodlpay::instruction::FundLiquidity { amount: 100_000 * USDC },
-            hodlpay::accounts::FundLiquidity {
-                funder: admin.pubkey(),
-                config,
-                funder_usdc: admin_usdc,
-                liquidity_vault: pda(&[LIQUIDITY_SEED]),
-                token_program: anchor_spl::token::ID,
-            },
-            &[],
-        ),
-        &[&admin],
-    )
-    .unwrap();
+    let mut env = Env { svm, admin, admin_usdc, admin_lp, usdc, sol, zec };
+    let admin = env.admin.insecure_clone();
+    liquidity(&mut env, &admin, admin_usdc, admin_lp, 100_000 * USDC, true).unwrap();
+    env
+}
 
-    Env { svm, admin, usdc, sol, zec }
+fn liquidity(env: &mut Env, provider: &Keypair, usdc: Pubkey, lp: Pubkey, amount: u64, deposit: bool) -> Result<(), String> {
+    let accounts = hodlpay::accounts::ProvideLiquidity {
+        provider: provider.pubkey(),
+        config: pda(&[CONFIG_SEED]),
+        provider_usdc: usdc,
+        provider_lp: lp,
+        liquidity_vault: pda(&[LIQUIDITY_SEED]),
+        lp_mint: pda(&[LP_MINT_SEED]),
+        token_program: anchor_spl::token::ID,
+    };
+    let i = if deposit {
+        ix(hodlpay::instruction::DepositLiquidity { amount }, accounts, &[])
+    } else {
+        ix(hodlpay::instruction::WithdrawLiquidity { shares: amount }, accounts, &[])
+    };
+    send(&mut env.svm, i, &[provider])
 }
 
 struct User {
@@ -402,4 +412,65 @@ fn stale_price_blocks_new_credit() {
 
     set_price(&mut env, sol, 120 * USDC);
     checkout(&mut env, &dave, &merchant.pubkey(), merchant_usdc, 100 * USDC).unwrap();
+}
+
+#[test]
+fn lp_shares_earn_merchant_and_late_fees() {
+    let mut env = setup();
+    let alice = new_user(&mut env, 2_000 * SOL, 100_000 * USDC);
+    let merchant = Keypair::new();
+    let merchant_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&merchant.pubkey())
+        .send()
+        .unwrap();
+    let vault = pda(&[LIQUIDITY_SEED]);
+    let (sol, sol_ata) = (env.sol, alice.sol_ata);
+    move_collateral(&mut env, &alice, sol, sol_ata, 2_000 * SOL, false).unwrap();
+
+    // $80k purchase: the pool pays the merchant $77.6k, the $2.4k fee accrues to LPs.
+    let loan = checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 80_000 * USDC).unwrap();
+    assert_eq!(balance(&env.svm, &vault), 22_400 * USDC);
+
+    // Lent-out funds cannot be withdrawn: 100k shares are worth $102.4k, only $22.4k is idle.
+    let (admin, admin_usdc, admin_lp) = (env.admin.insecure_clone(), env.admin_usdc, env.admin_lp);
+    assert!(liquidity(&mut env, &admin, admin_usdc, admin_lp, 100_000 * USDC, false).is_err());
+
+    // A second LP joins at the higher share price: $10,240 buys 10,000 shares.
+    let bob = Keypair::new();
+    env.svm.airdrop(&bob.pubkey(), SOL).unwrap();
+    let bob_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &bob, &env.usdc).send().unwrap();
+    let bob_lp = CreateAssociatedTokenAccount::new(&mut env.svm, &bob, &pda(&[LP_MINT_SEED])).send().unwrap();
+    MintTo::new(&mut env.svm, &env.admin, &env.usdc, &bob_usdc, 10_240 * USDC).send().unwrap();
+    liquidity(&mut env, &bob, bob_usdc, bob_lp, 10_240 * USDC, true).unwrap();
+    assert_eq!(balance(&env.svm, &bob_lp), 10_000 * USDC);
+
+    // Installment 1 on time; installment 2 paid 17 days in (due day 14 + 3 day grace): 1% late fee.
+    repay(&mut env, &alice, loan).unwrap();
+    let mut clock: anchor_lang::prelude::Clock = env.svm.get_sysvar();
+    clock.unix_timestamp += 17 * DAY + 1;
+    env.svm.set_sysvar(&clock);
+    repay(&mut env, &alice, loan).unwrap();
+    assert_eq!(balance(&env.svm, &alice.usdc_ata), 59_800 * USDC);
+    let l: Loan = read(&env.svm, &loan);
+    assert_eq!(l.late_fees_paid, 200 * USDC);
+
+    // Installments 3 and 4 are not yet overdue.
+    repay(&mut env, &alice, loan).unwrap();
+    repay(&mut env, &alice, loan).unwrap();
+    assert_eq!(balance(&env.svm, &alice.usdc_ata), 19_800 * USDC);
+    let c: hodlpay::state::Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    assert_eq!(c.fees_earned, 2_600 * USDC);
+    assert_eq!(c.total_debt, 0);
+
+    // Both LPs exit with their share of the $2.6k in fees.
+    let pool = balance(&env.svm, &vault);
+    assert_eq!(pool, 112_840 * USDC);
+    let before = balance(&env.svm, &admin_usdc);
+    liquidity(&mut env, &admin, admin_usdc, admin_lp, 100_000 * USDC, false).unwrap();
+    let admin_out = balance(&env.svm, &admin_usdc) - before;
+    assert_eq!(admin_out, ((100_000 * USDC) as u128 * pool as u128 / (110_000 * USDC) as u128) as u64);
+    assert!(admin_out > 102_500 * USDC);
+    liquidity(&mut env, &bob, bob_usdc, bob_lp, 10_000 * USDC, false).unwrap();
+    assert!(balance(&env.svm, &bob_usdc) > 10_240 * USDC);
+    assert_eq!(balance(&env.svm, &vault), 0);
 }

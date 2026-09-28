@@ -9,52 +9,137 @@ Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 ## How it works
 
 1. **Lock**: deposit SOL or zenZEC into an on-chain vault. Each asset has its own risk tier.
-2. **Pay**: at checkout the protocol pays the merchant from the liquidity vault, minus a 3% merchant fee.
-3. **Repay**: 4 installments, 14 days apart, 0% interest for the user.
-4. **Protect**: if collateral value falls, the keeper emits a margin alert first; only past the liquidation line can a liquidator repay part of the debt (max 50% per call) and take collateral at a 5% bonus. Repaid amounts are credited to the user's upcoming installments.
+2. **Pay**: at checkout the protocol pays the merchant from the liquidity pool, minus a 3% merchant fee. The merchant chooses the rail: USDC on Solana, or a TIP-20 stablecoin on Tempo.
+3. **Repay**: 4 installments, 14 days apart, 0% interest for the user. Paying more than 3 days after a due date adds a 1% late fee on that installment.
+4. **Protect**: the keeper posts oracle prices and emits a margin alert first; only past the liquidation line can a liquidator repay part of the debt (max 50% per call) and take collateral at a 5% bonus. Repaid amounts are credited to the user's upcoming installments.
 
 | Asset  | Max LTV | Margin alert | Liquidation |
 | ------ | ------- | ------------ | ----------- |
 | SOL    | 50%     | 65%          | 75%         |
 | zenZEC | 40%     | 55%          | 65%         |
 
-## Repository
+### Who earns what
+
+| Party     | Pays                          | Gets                                              |
+| --------- | ----------------------------- | ------------------------------------------------- |
+| Shopper   | 0% interest, late fee if late | Spending power without selling                    |
+| Merchant  | 3% fee                        | Full amount upfront in stablecoins, no price risk |
+| LP        | USDC into the pool            | Merchant fees + late fees, via LP share price     |
+
+The pool is value-accruing: `pool value = idle USDC in vault + outstanding debt`. LP shares are an SPL mint owned by the program; depositing mints shares at the current share price, withdrawing burns them and is limited to idle liquidity.
+
+## Architecture
+
+```
+                    ┌────────────── Solana ──────────────┐
+ Shopper wallet ──▶ │ hodlpay program (Anchor)           │
+                    │  position PDA: collateral slots    │
+                    │  loan PDA: 4-installment schedule  │
+                    │  vault PDAs: SOL / zenZEC / USDC   │
+                    │  LP mint PDA: pool shares          │
+                    └──────┬───────────────┬─────────────┘
+                           │ USDC          │ USDC + memo "hodlpay:tempo:<0x merchant>"
+                           ▼               ▼
+                     Solana merchant   Tempo bridge account
+                                           │ relayer verifies tx (amount + memo)
+                                           ▼
+                    ┌────────────── Tempo ───────────────┐
+                    │ HodlPaySettlement.sol              │
+                    │  settle(ref, merchant, token, amt) │
+                    │  transferWithMemo(merchant, ref)   │
+                    │  replay-protected per Solana sig   │
+                    └────────────────────────────────────┘
+
+ Keeper (app/scripts/keeper.ts or /api/keeper): Pyth → update_price, scan positions,
+ margin alerts (Telegram), liquidate unhealthy positions.
+```
+
+### Repository
 
 ```
 protocol/   Anchor program (Rust) + LiteSVM integration tests
-app/        Next.js console: vault, credit line, checkout, installments, risk desk
+tempo/      Solidity settlement contract for Tempo merchants
+app/        Next.js console, API routes (faucet, keeper, Tempo relayer) and ops scripts
+docs/       Go-to-market notes, pitch and demo video scripts
 ```
 
 ### Program instructions
 
-`initialize`, `add_asset`, `update_price`, `set_keeper`, `fund_liquidity`, `open_position`, `deposit`, `withdraw`, `checkout`, `repay`, `liquidate`, `check_health`
+| Group     | Instructions                                                   |
+| --------- | -------------------------------------------------------------- |
+| Admin     | `initialize`, `add_asset`, `update_price`, `set_keeper`        |
+| Liquidity | `deposit_liquidity`, `withdraw_liquidity`                      |
+| Position  | `open_position`, `deposit`, `withdraw`                         |
+| Credit    | `checkout`, `repay`                                            |
+| Risk      | `liquidate`, `check_health`                                    |
 
 Valuation, credit limits and liquidation thresholds are computed on-chain from the position's collateral slots and per-asset oracle prices. Stale prices (older than `max_price_age`) block new credit, withdrawals and liquidations.
 
-## Run it
+### Tempo rail
 
-Program (requires Rust, Solana CLI and Anchor 1.x):
+When a merchant wants settlement on Tempo, checkout pays the Tempo bridge account on Solana and attaches a memo `hodlpay:tempo:<evm address>`. The relayer (`/api/tempo/settle`) reads the confirmed Solana transaction, takes the amount from the bridge's USDC balance change and the merchant from the memo, then calls `HodlPaySettlement.settle` on Tempo. The contract pays the merchant with `transferWithMemo`, using `keccak256(solana signature)` as the memo, so every Tempo payment points back to its Solana checkout and cannot be settled twice.
+
+Testnet deployment (Moderato, chain 42431): contract `0x0a5cdea68a5acd2d070ba9a2e39299356408c402`, paying AlphaUSD.
+
+### Zcash (zenZEC)
+
+zenZEC is Zcash bridged to Solana by Zenrock: mainnet mint `JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` (SPL Token, 8 decimals). HodlPay lists it as its own collateral asset with a tighter risk tier than SOL (40% max LTV) because of thinner liquidity. There is no devnet zenZEC, so localnet and devnet use a test mint with the same decimals; on mainnet, bootstrap with `ZEC_MINT=JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` and the program uses the real token unchanged. ZEC prices come from the Pyth ZEC/USD feed.
+
+## Run it locally
+
+Requirements: Rust, Solana CLI 3.x, Anchor 1.x, Node 20+.
 
 ```bash
+# 1. Build and test the program
 cd protocol
 anchor build
-cargo test
-```
+cargo test -p hodlpay
 
-Console:
+# 2. Start a local validator with the program preloaded
+solana-test-validator --reset --ledger /tmp/hodlpay-ledger --limit-ledger-size 500000000 \
+  --upgradeable-program 5WWDSNYRjmU3Jp7DywyYgDYtYiBBZ3e8JmcBgS2HxihH \
+  target/deploy/hodlpay.so ~/.config/solana/id.json
 
-```bash
-cd app
+# 3. Create mints, initialize config, list assets, seed the LP pool
+cd ../app
 npm install
+npm run bootstrap
+
+# 4. Optional: deploy the Tempo settlement contract (Moderato testnet)
+npm run tempo:deploy
+
+# 5. Run the console
 npm run dev
 ```
 
-Prices come from Pyth Hermes when `PYTH_API_KEY` is set, otherwise from public market data.
+Open the console, press **Use demo wallet**, then **Get test funds**, then lock collateral, check out, repay, and use the risk desk to trigger a liquidation.
+
+`npm run smoke` runs the full flow headlessly against the configured cluster: LP deposit, faucet, deposits, checkout, repay, Tempo settlement with replay check, price shock, liquidation and LP withdrawal. `npm run keeper` runs the standalone keeper loop (`-- --once` for a single pass).
+
+### Devnet
+
+```bash
+solana config set --url devnet
+cd protocol && anchor deploy --provider.cluster devnet
+cd ../app && HODLPAY_CLUSTER=devnet npm run bootstrap
+```
+
+### Environment
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `ADMIN_SECRET_KEY` / `ADMIN_KEYPAIR` | API routes, scripts | Admin/keeper keypair (JSON array or path); defaults to `~/.config/solana/id.json` |
+| `PYTH_API_KEY` | prices | Pyth Hermes; falls back to public market data |
+| `HODLPAY_CLUSTER`, `HODLPAY_RPC`, `NEXT_PUBLIC_RPC` | bootstrap | Target cluster and RPC written to `deployment.json` |
+| `USDC_MINT`, `ZEC_MINT` | bootstrap | Use existing mints (mainnet USDC / zenZEC) instead of test mints |
+| `TEMPO_PRIVATE_KEY` | Tempo relayer | Relayer key; defaults to `app/.hodlpay/tempo-key.json` |
+| `HODLPAY_STATE_DIR` | API routes | Writable dir for demo state (use `/tmp` on serverless) |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | keeper | Push margin alerts |
 
 ## Roadmap
 
-- Devnet deployment and wallet-connected console
-- Keeper service: Pyth price posting, margin notifications, liquidation bot
-- Tempo settlement contract for merchants who prefer Tempo stablecoins
-- zenZEC mainnet mint integration
-- Merchant SDK and Solana Pay checkout link
+- Mainnet with real USDC and zenZEC, Pyth pull oracle posted in the same transaction as checkout
+- Merchant SDK and Solana Pay checkout links
+- Fee accrual over the loan term instead of at origination (removes LP timing games)
+- Longer terms with interest for larger purchases
+- Tempo-native repayments and a direct Tempo liquidity pool

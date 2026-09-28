@@ -18,8 +18,21 @@ pub struct Config {
     pub installment_interval: i64,
     pub max_price_age: i64,
     pub total_debt: u64,
+    /// Share token for liquidity providers; pool value = idle liquidity + outstanding debt.
+    pub lp_mint: Pubkey,
+    /// Charged on an installment paid later than `next_due_at + grace_period`.
+    pub late_fee_bps: u16,
+    pub grace_period: i64,
+    /// Lifetime merchant fees + late fees accrued to liquidity providers.
+    pub fees_earned: u64,
     pub bump: u8,
     pub vault_bump: u8,
+}
+
+impl Config {
+    pub fn pool_value(&self, idle: u64) -> Result<u64> {
+        idle.checked_add(self.total_debt).ok_or(error!(ErrorCode::Overflow))
+    }
 }
 
 #[account]
@@ -82,6 +95,7 @@ pub struct Loan {
     pub installments_total: u8,
     pub installments_paid: u8,
     pub repaid: u64,
+    pub late_fees_paid: u64,
     pub created_at: i64,
     pub next_due_at: i64,
     pub bump: u8,
@@ -114,6 +128,15 @@ pub struct RepayEvent {
     pub installment: u8,
     pub paid: u64,
     pub from_credit: u64,
+    pub late_fee: u64,
+}
+
+#[event]
+pub struct LiquidityEvent {
+    pub provider: Pubkey,
+    pub amount: u64,
+    pub shares: u64,
+    pub deposit: bool,
 }
 
 #[event]

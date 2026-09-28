@@ -75,6 +75,8 @@ export interface LedgerEvent {
   at: number;
   kind: EventKind;
   message: string;
+  /** On-chain transaction signature, when the event came from a real transaction. */
+  sig?: string;
 }
 
 export interface State {
@@ -123,7 +125,8 @@ export function outstanding(loan: Loan): number {
   return loan.installments.filter((i) => i.paidAt === null).reduce((s, i) => s + i.amount, 0);
 }
 
-export function metrics(s: State): Metrics {
+/** `debtOverride` lets on-chain mode use the program's debt, which already nets out liquidations. */
+export function metrics(s: State, debtOverride?: number): Metrics {
   let collateralValue = 0;
   let borrowLimit = 0;
   let marginLimit = 0;
@@ -135,7 +138,7 @@ export function metrics(s: State): Metrics {
     marginLimit += v * ASSETS[id].marginLtv;
     liquidationLimit += v * ASSETS[id].liquidationLtv;
   }
-  const debt = s.loans.reduce((sum, l) => sum + outstanding(l), 0);
+  const debt = debtOverride ?? s.loans.reduce((sum, l) => sum + outstanding(l), 0);
   const ltv = collateralValue > 0 ? debt / collateralValue : 0;
   let status: Status = "healthy";
   if (collateralValue === 0 && debt === 0) status = "empty";

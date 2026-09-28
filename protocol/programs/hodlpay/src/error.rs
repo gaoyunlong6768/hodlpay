@@ -32,4 +32,6 @@ pub enum ErrorCode {
     NotLiquidatable,
     #[msg("Repay amount exceeds the close factor")]
     ExceedsCloseFactor,
+    #[msg("Not enough idle liquidity: funds are lent out")]
+    InsufficientLiquidity,
 }

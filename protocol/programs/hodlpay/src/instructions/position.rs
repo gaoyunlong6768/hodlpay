@@ -4,33 +4,6 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use crate::{constants::*, error::ErrorCode, math::valuate, state::*};
 
 #[derive(Accounts)]
-pub struct FundLiquidity<'info> {
-    pub funder: Signer<'info>,
-    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
-    pub config: Box<Account<'info, Config>>,
-    #[account(mut, token::mint = config.usdc_mint, token::authority = funder)]
-    pub funder_usdc: Box<Account<'info, TokenAccount>>,
-    #[account(mut, address = config.liquidity_vault)]
-    pub liquidity_vault: Box<Account<'info, TokenAccount>>,
-    pub token_program: Program<'info, Token>,
-}
-
-pub fn handle_fund_liquidity(ctx: Context<FundLiquidity>, amount: u64) -> Result<()> {
-    require!(amount > 0, ErrorCode::ZeroAmount);
-    token::transfer(
-        CpiContext::new(
-            token::ID,
-            Transfer {
-                from: ctx.accounts.funder_usdc.to_account_info(),
-                to: ctx.accounts.liquidity_vault.to_account_info(),
-                authority: ctx.accounts.funder.to_account_info(),
-            },
-        ),
-        amount,
-    )
-}
-
-#[derive(Accounts)]
 pub struct OpenPosition<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,

@@ -32,8 +32,12 @@ pub mod hodlpay {
         admin::handle_update_price(ctx, price_e6)
     }
 
-    pub fn fund_liquidity(ctx: Context<FundLiquidity>, amount: u64) -> Result<()> {
-        position::handle_fund_liquidity(ctx, amount)
+    pub fn deposit_liquidity(ctx: Context<ProvideLiquidity>, amount: u64) -> Result<()> {
+        pool::handle_deposit_liquidity(ctx, amount)
+    }
+
+    pub fn withdraw_liquidity(ctx: Context<ProvideLiquidity>, shares: u64) -> Result<()> {
+        pool::handle_withdraw_liquidity(ctx, shares)
     }
 
     pub fn open_position(ctx: Context<OpenPosition>) -> Result<()> {

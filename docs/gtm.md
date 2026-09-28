@@ -1,0 +1,54 @@
+# HodlPay go-to-market
+
+## The wedge
+
+Crypto holders with real wealth and a reason not to sell: unrealized gains, long-term conviction, or no local credit history. Today they either sell (tax event, lost upside) or borrow on a DeFi money market that has no spending rail. HodlPay is the first checkout button that turns collateral into a purchase.
+
+Start with purchases that are large enough to matter and paid online in stablecoins already:
+
+1. **Travel** (flights, hotels, nomad housing): tickets of $500 to $3,000, customers already crypto-heavy.
+2. **Hardware and furniture** for remote workers.
+3. **Crypto-native commerce**: merchants already on Solana Pay, Helio, Sphere and Tempo payment rails.
+
+## Customers
+
+| Segment | Pain | Why HodlPay |
+| --- | --- | --- |
+| Long-term SOL holders | Selling triggers tax and misses upside | Spend now, repay over 6 weeks, keep the SOL |
+| ZEC holders | Privacy asset with few places to spend it and no lending venue | zenZEC collateral tier, spend without selling |
+| Emerging-market users | Thin credit files, real crypto balances | Credit sized by collateral, no credit check |
+| Merchants | BNPL lifts conversion but Klarna/Affirm do not serve crypto buyers | Paid upfront in USDC or Tempo stablecoins, zero price risk, same 3% fee range as BNPL |
+
+## Channels
+
+1. **Merchant integrations first** (supply side): a Solana Pay compatible checkout link and a Tempo settlement option. Target 10 design-partner merchants in travel and crypto commerce; each brings its own buyers.
+2. **Wallet and payment-app partners**: HodlPay as a "Pay in 4" option inside wallets and card/payment apps that already hold user collateral.
+3. **Zcash community**: first venue to spend ZEC on credit; co-marketing with the Zenrock bridge.
+4. **LP side**: USDC holders earn merchant-fee yield that is uncorrelated with DeFi lending rates. Launch with a capped pool and grow the cap with repayment performance.
+
+## Economics (per $1,000 purchase)
+
+| Line | Amount |
+| --- | --- |
+| Merchant fee (3%) | $30 |
+| Capital used | $970, amortizing over 42 days: equivalent to $970 for 21 days |
+| Gross yield on deployed capital | 30 / 970 × 365 / 21 ≈ 54% APR before late fees; realized pool APY = this × utilization |
+| Credit loss | near zero by design: overcollateralized, keeper liquidates before debt exceeds collateral |
+
+Protocol take rate (future): a share of the merchant fee (e.g. 20%) to the treasury, the rest to LPs.
+
+## Milestones
+
+| When | Goal |
+| --- | --- |
+| Hackathon | Working protocol on devnet, Tempo settlement on testnet, live console |
+| +1 month | Mainnet beta with capped pool, 3 design-partner merchants |
+| +3 months | 10 merchants, $250k purchase volume, first LP cohort |
+| +6 months | Merchant SDK, wallet partner integration, extended terms with interest |
+
+## Risks and answers
+
+- **Collateral crash**: per-asset LTV tiers, margin alerts before liquidation, 50% close factor, 5% bonus for liquidators, stale-price guard.
+- **Liquidity crunch**: withdrawals limited to idle liquidity; utilization shown in the pool; pool cap during beta.
+- **Regulation**: users borrow against their own assets with no interest in the base product; merchants receive stablecoins. KYC at checkout thresholds when we move to fiat-facing merchants.
+- **Oracle risk**: Pyth prices with a max age; every credit or liquidation action refuses stale prices.

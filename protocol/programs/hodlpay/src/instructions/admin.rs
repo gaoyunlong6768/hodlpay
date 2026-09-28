@@ -11,6 +11,8 @@ pub struct InitializeArgs {
     pub installments: u8,
     pub installment_interval: i64,
     pub max_price_age: i64,
+    pub late_fee_bps: u16,
+    pub grace_period: i64,
 }
 
 #[derive(Accounts)]
@@ -24,8 +26,8 @@ pub struct Initialize<'info> {
         seeds = [CONFIG_SEED],
         bump
     )]
-    pub config: Account<'info, Config>,
-    pub usdc_mint: Account<'info, Mint>,
+    pub config: Box<Account<'info, Config>>,
+    pub usdc_mint: Box<Account<'info, Mint>>,
     #[account(
         init,
         payer = admin,
@@ -34,7 +36,16 @@ pub struct Initialize<'info> {
         token::mint = usdc_mint,
         token::authority = config,
     )]
-    pub liquidity_vault: Account<'info, TokenAccount>,
+    pub liquidity_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init,
+        payer = admin,
+        seeds = [LP_MINT_SEED],
+        bump,
+        mint::decimals = usdc_mint.decimals,
+        mint::authority = config,
+    )]
+    pub lp_mint: Box<Account<'info, Mint>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -49,8 +60,14 @@ pub fn handle_initialize(ctx: Context<Initialize>, args: InitializeArgs) -> Resu
     require!(args.installments > 0, ErrorCode::InvalidParam);
     require!(args.installment_interval > 0, ErrorCode::InvalidParam);
     require!(args.max_price_age > 0, ErrorCode::InvalidParam);
+    require!(args.late_fee_bps < 2_000, ErrorCode::InvalidParam);
+    require!(args.grace_period >= 0, ErrorCode::InvalidParam);
 
     let config = &mut ctx.accounts.config;
+    config.lp_mint = ctx.accounts.lp_mint.key();
+    config.late_fee_bps = args.late_fee_bps;
+    config.grace_period = args.grace_period;
+    config.fees_earned = 0;
     config.admin = ctx.accounts.admin.key();
     config.keeper = ctx.accounts.admin.key();
     config.usdc_mint = ctx.accounts.usdc_mint.key();
