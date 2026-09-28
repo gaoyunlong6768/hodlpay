@@ -114,6 +114,7 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
         <Vault
           state={state}
           balances={view?.balances}
+          defaultAsset="zenZEC"
           defaultAmount="2"
           busy={busy === "deposit" || busy === "withdraw"}
           onDeposit={guard(actions.deposit)}
@@ -386,18 +387,20 @@ function Vault({
   state,
   balances,
   busy,
+  defaultAsset = "SOL",
   defaultAmount = "25",
   onDeposit,
   onWithdraw,
 }: {
   state: State;
   balances?: Balances;
+  defaultAsset?: AssetId;
   defaultAmount?: string;
   busy?: boolean;
   onDeposit: (a: AssetId, x: number) => void;
   onWithdraw: (a: AssetId, x: number) => void;
 }) {
-  const [asset, setAsset] = useState<AssetId>("SOL");
+  const [asset, setAsset] = useState<AssetId>(defaultAsset);
   const [amount, setAmount] = useState(defaultAmount);
   const x = Number(amount);
 
