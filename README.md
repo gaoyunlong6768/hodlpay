@@ -37,6 +37,23 @@ The pool is value-accruing: `pool value = idle USDC in vault + outstanding debt 
 
 Every asset stores its Pyth feed id. `refresh_price` is permissionless: anyone can pass a Pyth `PriceUpdateV2` account (for example the sponsored feed accounts Pyth keeps fresh on devnet and mainnet), and the program checks the owner (Pyth receiver), full Wormhole verification, the feed id, the confidence interval (≤ 2% of price) and the age before accepting it. Older updates never overwrite newer prices. The keeper uses this path when a fresh sponsored feed exists and falls back to posting prices itself (`update_price`) otherwise, e.g. on localnet or during the demo stress test.
 
+### How it compares
+
+Spending against crypto collateral already exists. What is different here is who pays and how the debt is shaped: HodlPay is BNPL, not a loan. The merchant pays a fee in exchange for a sale and upfront settlement, so the shopper pays 0% interest on a fixed 4-installment schedule.
+
+| | HodlPay | Buydl | ether.fi Cash (Borrow Mode) | Nexo Card (Credit Mode) | Klarna / Affirm |
+| --- | --- | --- | --- | --- | --- |
+| Shopper cost | 0% interest, late fee only | Kamino borrow rate | Variable Aave rate from day one | Credit-line rate by loyalty tier | 0% on pay-in-4 |
+| Who funds it | Merchant fee (3%) to an LP pool | Shopper interest to Kamino lenders | Shopper interest to Aave lenders | Shopper interest to Nexo | Merchant fee |
+| Repayment | 4 installments, 14 days apart | Open-ended loan | Open-ended, no schedule | Open-ended | 4 installments |
+| Collateral | SOL, zenZEC (per-asset risk tiers) | SOL | Vault assets (ETH, BTC, stables…) | Custodial deposit | None, credit check |
+| Merchant settlement | USDC on Solana or stablecoins on Tempo | USDC on Solana | Visa rails | Visa rails | Fiat, days later |
+| Custody | Non-custodial program | Non-custodial (Kamino) | Non-custodial (Safe) | Custodial | n/a |
+
+- **Versus crypto cards and borrow routers**: they are loans with the shopper paying interest for as long as the balance is open. HodlPay moves the cost to the merchant, which is how BNPL wins checkout share, and gives the shopper a fixed end date. The merchant also gets a sales channel: hosted payment links and a portal, not just a payment method.
+- **Versus Klarna and Affirm**: same economics for the merchant, but no credit check, so it serves crypto holders anywhere, and the merchant is paid in stablecoins in seconds instead of fiat in days.
+- **Chains and assets**: Tempo settlement for merchants who want payment-chain stablecoins, and zenZEC collateral so ZEC holders can pay at checkout, where today their only on-chain option on Solana is an interest-bearing loan (Kamino's ZEC market).
+
 ## Architecture
 
 ```
@@ -97,7 +114,7 @@ Trust model: the relayer is a single trusted key today. The contract refuses to 
 
 zenZEC is Zcash bridged to Solana by Zenrock: mainnet mint `JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` (SPL Token, 8 decimals). HodlPay lists it as its own collateral asset with a tighter risk tier than SOL (40% max LTV) because of thinner liquidity. There is no devnet zenZEC, so localnet and devnet use a test mint with the same decimals; on mainnet, bootstrap with `ZEC_MINT=JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` and the program uses the real token unchanged. ZEC prices come from the Pyth ZEC/USD feed.
 
-Why it matters for ZEC holders: ZEC is a long-term privacy asset with almost nowhere to spend it and no lending venue, so today the only way to use it is to sell it. With HodlPay a holder keeps the position and spends against it:
+Why it matters for ZEC holders: ZEC is a long-term privacy asset with almost nowhere to spend it. On Solana, holders can now borrow USDC against bridged ZEC on Kamino, but that is an open-ended loan at a variable rate, and the USDC still has to find its way to a merchant. With HodlPay a holder keeps the position and pays at checkout, interest-free in 4:
 
 1. Send ZEC from any Zcash wallet (shielded or transparent) to a personal deposit address from the [Zenrock mint page](https://app.zenrocklabs.io/services/zenzec/crucible/mint). zenZEC, 1:1 backed and held in decentralized MPC custody, arrives in the Solana wallet in about 5 minutes.
 2. Lock zenZEC in HodlPay. It gets its own risk tier and oracle feed, separate from SOL.
@@ -169,3 +186,7 @@ cd ../app && HODLPAY_CLUSTER=devnet npm run bootstrap
 - Merchant SDK (React button, webhooks on sale) and Solana Pay transaction requests
 - Longer terms with interest for larger purchases
 - Tempo-native repayments and a direct Tempo liquidity pool
+
+## License
+
+MIT, see [LICENSE](LICENSE).

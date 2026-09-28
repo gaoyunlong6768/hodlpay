@@ -2,7 +2,7 @@
 
 ## The wedge
 
-Crypto holders with real wealth and a reason not to sell: unrealized gains, long-term conviction, or no local credit history. Today they either sell (tax event, lost upside) or borrow on a DeFi money market that has no spending rail. HodlPay is the first checkout button that turns collateral into a purchase.
+Crypto holders with real wealth and a reason not to sell: unrealized gains, long-term conviction, or no local credit history. Today they either sell (tax event, lost upside) or borrow: a crypto card's borrow mode, a checkout router on top of a money market, or a DeFi loan they bridge to a merchant themselves. Every one of those is a loan the shopper pays interest on with no end date. HodlPay is BNPL on collateral: the merchant pays the fee, the shopper gets 4 interest-free installments.
 
 Start with purchases that are large enough to matter and paid online in stablecoins already:
 
@@ -15,7 +15,7 @@ Start with purchases that are large enough to matter and paid online in stableco
 | Segment | Pain | Why HodlPay |
 | --- | --- | --- |
 | Long-term SOL holders | Selling triggers tax and misses upside | Spend now, repay over 6 weeks, keep the SOL |
-| ZEC holders | Privacy asset with few places to spend it and no lending venue | zenZEC collateral tier, spend without selling |
+| ZEC holders | Privacy asset with few places to spend it; the only Solana credit option (Kamino's ZEC market) is an interest-bearing loan | zenZEC collateral tier, spend without selling |
 | Emerging-market users | Thin credit files, real crypto balances | Credit sized by collateral, no credit check |
 | Merchants | BNPL lifts conversion but Klarna/Affirm do not serve crypto buyers | Paid upfront in USDC or Tempo stablecoins, zero price risk, same 3% fee range as BNPL |
 
@@ -52,3 +52,4 @@ Protocol take rate (future): a share of the merchant fee (e.g. 20%) to the treas
 - **Liquidity crunch**: withdrawals limited to idle liquidity; utilization shown in the pool; pool cap during beta.
 - **Regulation**: users borrow against their own assets with no interest in the base product; merchants receive stablecoins. KYC at checkout thresholds when we move to fiat-facing merchants.
 - **Oracle risk**: Pyth prices with a max age; every credit or liquidation action refuses stale prices.
+- **Competition**: crypto cards (ether.fi Cash, Nexo) and checkout routers (Buydl on Kamino) already let holders spend against collateral, all as interest-bearing loans. Our edge is the BNPL model (merchant-funded, 0% for the shopper, fixed schedule) and the merchant side: payment links, a portal and settlement on Solana or Tempo. If a money market adds pay-in-4, our pool and risk engine can plug into its liquidity instead of competing with it.
