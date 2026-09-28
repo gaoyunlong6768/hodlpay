@@ -7,11 +7,11 @@ export default function SiteHeader() {
       <Link href="/" className="font-display text-2xl tracking-tight">
         Hodl<span className="italic">Pay</span>
       </Link>
-      <nav className="num flex items-center gap-5 text-xs uppercase tracking-widest text-ink-soft">
+      <nav className="num flex items-center gap-4 text-xs uppercase tracking-widest text-ink-soft sm:gap-5">
         <Link href="/#how" className="hidden hover:text-ink sm:inline">
           How it works
         </Link>
-        <Link href="/#console" className="hidden hover:text-ink sm:inline">
+        <Link href="/#console" className="hover:text-ink">
           Console
         </Link>
         <Link href="/merchant" className="hover:text-ink">
@@ -20,7 +20,7 @@ export default function SiteHeader() {
         <Link href="/audit" className="hover:text-ink">
           Audit
         </Link>
-        <span className="border border-ink px-2.5 py-1 text-ink">{DEPLOYMENT.cluster}</span>
+        <span className="hidden border border-ink px-2.5 py-1 text-ink sm:inline">{DEPLOYMENT.cluster}</span>
       </nav>
     </header>
   );

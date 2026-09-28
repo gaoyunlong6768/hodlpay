@@ -375,9 +375,9 @@ function Sales({ profile }: { profile: Profile }) {
           ) : (
             <ul className="num divide-y divide-dashed divide-rule text-xs">
               {sales.map((s) => (
-                <li key={s.loan} className="flex items-center gap-3 py-2">
+                <li key={s.loan} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 sm:flex-nowrap">
                   <span className="w-24 shrink-0 text-ink-soft">{when(s.at)}</span>
-                  <span className="flex-1">
+                  <span className="order-last basis-full sm:order-none sm:flex-1 sm:basis-auto">
                     shopper{" "}
                     <a className="underline decoration-dotted" href={hp.explorerAddress(s.loan)} target="_blank" rel="noreferrer">
                       {short(s.shopper)}
@@ -386,7 +386,7 @@ function Sales({ profile }: { profile: Profile }) {
                       repaid {s.paid}/{s.total}
                     </span>
                   </span>
-                  <span className="w-20 text-right">{usd(s.principal)}</span>
+                  <span className="ml-auto w-20 text-right sm:ml-0">{usd(s.principal)}</span>
                   <span className="w-24 text-right font-medium text-mint">+{usd(s.received)}</span>
                 </li>
               ))}

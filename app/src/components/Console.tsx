@@ -239,7 +239,7 @@ function Lend({
   const pool = view?.pool;
   const mine = view ? view.lpShares * (pool?.sharePrice ?? 1) : 0;
   return (
-    <Card title="Lend" kicker="07 · liquidity pool">
+    <Card title="Lend" kicker="06 · liquidity pool">
       <p className="text-sm text-ink-soft">
         LPs fund every purchase and earn the {PROTOCOL.merchantFeeBps / 100}% merchant fee
         {view ? ` plus a ${view.lateFeeBps / 100}% late fee after a ${view.gracePeriodDays}-day grace period` : ""}.
@@ -322,7 +322,7 @@ function Shell({
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-12">{children}</div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">{children}</div>
     </section>
   );
 }
@@ -983,7 +983,7 @@ function Ledger({ state, onchain }: { state: State; onchain?: boolean }) {
     repay: "text-mint",
   };
   return (
-    <Card title="Ledger" kicker="06 · events">
+    <Card title="Ledger" kicker={onchain ? "07 · events" : "06 · events"}>
       {state.events.length === 0 ? (
         <p className="text-sm text-ink-soft">
           {onchain
@@ -993,16 +993,16 @@ function Ledger({ state, onchain }: { state: State; onchain?: boolean }) {
       ) : (
         <ul className="num max-h-64 space-y-1 overflow-auto text-xs">
           {state.events.map((e) => (
-            <li key={e.id} className="flex gap-3">
+            <li key={e.id} className="flex flex-wrap gap-x-3 border-b border-rule/50 pb-1.5 last:border-0 sm:flex-nowrap sm:border-0 sm:pb-0">
               <span className="w-24 shrink-0 text-ink-soft">
                 {new Date(e.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{" "}
                 {new Date(e.at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}
               </span>
               <span className={`w-20 shrink-0 uppercase ${color[e.kind] ?? ""}`}>{e.kind}</span>
-              <span className="flex-1">{e.message}</span>
+              <span className="order-last basis-full sm:order-none sm:flex-1 sm:basis-auto">{e.message}</span>
               {e.sig && (
                 <a
-                  className="shrink-0 text-ink-soft underline decoration-dotted"
+                  className="ml-auto shrink-0 text-ink-soft underline decoration-dotted sm:ml-0"
                   href={e.sig.startsWith("0x") ? tempoExplorerTx(e.sig) : explorerTx(e.sig)}
                   target="_blank"
                   rel="noreferrer"

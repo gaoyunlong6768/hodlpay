@@ -61,7 +61,7 @@ export function WalletBar({
             </a>
           </span>
           {balances ? (
-            <span className="num flex gap-4 text-xs text-ink-soft">
+            <span className="num flex flex-wrap gap-x-4 gap-y-1 whitespace-nowrap text-xs text-ink-soft">
               <span>{balances.SOL.toFixed(3)} SOL</span>
               <span>{balances.zenZEC.toFixed(4)} zenZEC</span>
               <span>{usd(balances.USDC)} USDC</span>

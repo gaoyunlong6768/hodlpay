@@ -156,8 +156,10 @@ function Pay({ r }: { r: PayRequest }) {
                 </button>
                 {need > walletHas && (
                   <p className="num mt-1.5 text-[11px] text-vermilion">
-                    Your wallet has {walletHas.toFixed(4)} {asset}. Use &ldquo;Get test funds&rdquo; above or pick the
-                    other asset.
+                    {asset === "SOL"
+                      ? `You can lock ${walletHas.toFixed(4)} SOL (0.05 SOL stays in your wallet for fees).`
+                      : `Your wallet has ${walletHas.toFixed(4)} ${asset}.`}{" "}
+                    Use &ldquo;Get test funds&rdquo; above or pick the other asset.
                   </p>
                 )}
               </div>
@@ -197,7 +199,8 @@ function Pay({ r }: { r: PayRequest }) {
           {paysFirst
             ? `${r.merchant} is paid in full now; you pay the first installment in the same transaction. `
             : `Your wallet has less than ${usd(quarter)} USDC, so the first installment stays due today. `}
-          0% interest. Paying more than 3 days late on an installment adds a 1% fee. You can pay off early any time.
+          0% interest. An installment still unpaid 3 days after its due date is collected from your collateral with a
+          1% late fee. You can pay off early any time.
         </p>
       </Step>
     </div>
