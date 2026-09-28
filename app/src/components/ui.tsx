@@ -43,6 +43,7 @@ export function WalletBar({
   };
 
   const addr = publicKey?.toBase58();
+  const extensions = wallets.filter((w) => w.adapter.name !== DemoWalletName);
   return (
     <div className="receipt flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
       {addr ? (
@@ -80,13 +81,25 @@ export function WalletBar({
               disconnect
             </button>
           </span>
+          <p className="basis-full text-[11px] text-ink-soft">
+            {wallet?.adapter.name === DemoWalletName
+              ? `Demo wallet: a real Solana ${DEPLOYMENT.cluster} wallet whose key is kept in this browser and signs without popups. Test funds only; clearing site data creates a new one.`
+              : `Real transactions on Solana ${DEPLOYMENT.cluster}: switch your wallet to ${DEPLOYMENT.cluster} (in Phantom: Settings → Developer Settings → Testnet Mode), then press Get test funds.`}
+          </p>
         </>
       ) : (
         <>
           <span className="text-sm text-ink-soft">
-            {connecting && wallet
-              ? `Reconnecting ${wallet.adapter.name}…`
-              : `Real transactions on Solana ${DEPLOYMENT.cluster}. No wallet? The demo wallet signs in your browser.`}
+            {connecting && wallet ? (
+              `Reconnecting ${wallet.adapter.name}…`
+            ) : (
+              <>
+                Every action is a real transaction on Solana {DEPLOYMENT.cluster}.{" "}
+                <span className="text-ink">Demo wallet</span>: created in this browser, no extension or popups, test
+                funds only. <span className="text-ink">Connect wallet</span>: Phantom, Solflare or Backpack set to{" "}
+                {DEPLOYMENT.cluster}.
+              </>
+            )}
           </span>
           <span className="relative ml-auto flex gap-2">
             <button
@@ -96,16 +109,13 @@ export function WalletBar({
             >
               {connecting ? "Connecting…" : "Use demo wallet"}
             </button>
-            {wallets.some((w) => w.adapter.name !== DemoWalletName) && (
-              <button onClick={() => setOpen((o) => !o)} className="border border-ink px-4 py-2 text-sm">
-                Connect wallet
-              </button>
-            )}
+            <button onClick={() => setOpen((o) => !o)} disabled={connecting} className="border border-ink px-4 py-2 text-sm">
+              Connect wallet
+            </button>
             {open && (
-              <div className="absolute right-0 top-full z-10 mt-1 min-w-48 border border-ink bg-paper">
-                {wallets
-                  .filter((w) => w.adapter.name !== DemoWalletName)
-                  .map((w) => (
+              <div className="absolute right-0 top-full z-10 mt-1 min-w-56 border border-ink bg-paper">
+                {extensions.length ? (
+                  extensions.map((w) => (
                     <button
                       key={w.adapter.name}
                       onClick={() => choose(w.adapter.name)}
@@ -115,7 +125,16 @@ export function WalletBar({
                       <img src={w.adapter.icon} alt="" className="h-4 w-4" />
                       {w.adapter.name}
                     </button>
-                  ))}
+                  ))
+                ) : (
+                  <p className="px-3 py-2 text-xs text-ink-soft">
+                    No Solana wallet extension found in this browser.{" "}
+                    <a href="https://phantom.com/download" target="_blank" rel="noreferrer" className="underline">
+                      Install Phantom
+                    </a>{" "}
+                    or use the demo wallet.
+                  </p>
+                )}
               </div>
             )}
           </span>

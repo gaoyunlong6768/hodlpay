@@ -12,7 +12,7 @@ Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 
 **Live on Solana devnet: [hodlpay.vercel.app](https://hodlpay.vercel.app)**
 
-1. Open the console and click **Use demo wallet** (or connect Phantom set to devnet).
+1. Open the console and click **Use demo wallet**: a real devnet wallet created in your browser, no extension and no signing popups (its key stays in localStorage, so test funds only). Or click **Connect wallet** to use Phantom, Solflare or Backpack switched to devnet.
 2. Click **Get test funds**: 2,000 test USDC, 3 test zenZEC and a little SOL for fees.
 3. Lock zenZEC, buy the $860 flight and pick the settlement rail (USDC on Solana or stablecoins on Tempo).
 4. Repay an installment, then drag the Risk desk slider to -60% to trigger a margin alert and a keeper liquidation.
