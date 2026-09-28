@@ -6,6 +6,29 @@ HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash o
 
 Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 
+## Try it
+
+**Live on Solana devnet: [hodlpay.vercel.app](https://hodlpay.vercel.app)**
+
+1. Open the console and click **Use demo wallet** (or connect Phantom set to devnet).
+2. Click **Get test funds**: 2,000 test USDC, 3 test zenZEC and a little SOL for fees.
+3. Lock zenZEC, buy the $860 flight and pick the settlement rail (USDC on Solana or stablecoins on Tempo).
+4. Repay an installment, then drag the Risk desk slider to -60% to trigger a margin alert and a keeper liquidation.
+
+Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchant](https://hodlpay.vercel.app/merchant). Every action is a real devnet transaction linked to the explorer.
+
+| | |
+| --- | --- |
+| Program (devnet) | [`5WWDSNYRjmU3Jp7DywyYgDYtYiBBZ3e8JmcBgS2HxihH`](https://explorer.solana.com/address/5WWDSNYRjmU3Jp7DywyYgDYtYiBBZ3e8JmcBgS2HxihH?cluster=devnet) |
+| Test USDC mint | [`52WhUKNE1iz9Ddgc1BoqUfADuFQAxViW9m6Hnao3NdBg`](https://explorer.solana.com/address/52WhUKNE1iz9Ddgc1BoqUfADuFQAxViW9m6Hnao3NdBg?cluster=devnet) |
+| Test zenZEC mint | [`6t8pBbX7hMtXmFjfJDjMiiGrPqYXbK7YzK1SzSqkcb2J`](https://explorer.solana.com/address/6t8pBbX7hMtXmFjfJDjMiiGrPqYXbK7YzK1SzSqkcb2J?cluster=devnet) |
+
+![HodlPay home](docs/screenshots/home.png)
+
+| Checkout: merchant paid upfront, 4 installments scheduled | Merchant portal: payment link, QR code, sales |
+| --- | --- |
+| ![Checkout and installments](docs/screenshots/checkout.png) | ![Merchant portal](docs/screenshots/merchant.png) |
+
 ## How it works
 
 1. **Lock**: deposit SOL or zenZEC into an on-chain vault. Each asset has its own risk tier.
