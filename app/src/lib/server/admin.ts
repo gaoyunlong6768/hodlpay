@@ -139,8 +139,8 @@ export async function faucet(wallet: PublicKey) {
     t.add(SystemProgram.transfer({ fromPubkey: admin.publicKey, toPubkey: wallet, lamports: FAUCET.sol * LAMPORTS_PER_SOL }));
   } else {
     const bal = await conn.getBalance(wallet);
-    if (bal < 0.05 * LAMPORTS_PER_SOL) {
-      t.add(SystemProgram.transfer({ fromPubkey: admin.publicKey, toPubkey: wallet, lamports: 0.1 * LAMPORTS_PER_SOL }));
+    if (bal < 0.01 * LAMPORTS_PER_SOL) {
+      t.add(SystemProgram.transfer({ fromPubkey: admin.publicKey, toPubkey: wallet, lamports: 0.03 * LAMPORTS_PER_SOL }));
     }
   }
   return send(p, t);

@@ -164,9 +164,13 @@ solana-test-validator ... --account 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE
 
 ```bash
 solana config set --url devnet
-cd protocol && anchor deploy --provider.cluster devnet
+cd protocol && solana program deploy target/deploy/hodlpay.so \
+  --program-id target/deploy/hodlpay-keypair.json \
+  --max-len $(wc -c < target/deploy/hodlpay.so)
 cd ../app && HODLPAY_CLUSTER=devnet npm run bootstrap
 ```
+
+The release profile builds with `opt-level = "z"` (about 390 KB), so the deploy costs about 2 SOL in rent. Sizing the program account to the binary instead of the default headroom, and skipping the on-chain IDL (the app ships its own), keeps it there; `solana program extend` adds space for a larger upgrade later. On devnet the faucet gives each new wallet 0.03 SOL for fees; collateral for the demo is test zenZEC.
 
 ### Environment
 
