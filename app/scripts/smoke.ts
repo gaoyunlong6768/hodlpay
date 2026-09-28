@@ -3,6 +3,7 @@
  * faucet → deposit SOL + zenZEC → checkout → repay → price crash → keeper liquidation.
  *
  *   npx tsx scripts/smoke.ts
+ *   SMOKE_SOL=0.01 npx tsx scripts/smoke.ts   # devnet: the faucet only funds 0.03 SOL
  */
 import { Keypair, PublicKey } from "@solana/web3.js";
 import * as hp from "../src/lib/hodlpay";
@@ -51,7 +52,8 @@ async function main() {
   const lpShares = Number((await conn.getTokenAccountBalance(hp.ata(hp.pdas.lpMint(), user.publicKey))).value.uiAmount);
   console.log(`  got ${lpShares.toFixed(4)} LP shares at $${pool0.sharePrice.toFixed(6)}`);
 
-  await step("deposit 2 SOL", hp.buildDeposit(p, user.publicKey, "SOL", 2, false));
+  const solDeposit = Number(process.env.SMOKE_SOL ?? 2);
+  await step(`deposit ${solDeposit} SOL`, hp.buildDeposit(p, user.publicKey, "SOL", solDeposit, false));
   await step("deposit 1 zenZEC", hp.buildDeposit(p, user.publicKey, "zenZEC", 1, true));
 
   let pos = await hp.fetchPosition(p, user.publicKey);
