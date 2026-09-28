@@ -195,6 +195,7 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
           loading={loading}
           busy={busy === "repay"}
           creditBalance={view?.creditBalance ?? 0}
+          overdueTerms={view ? { graceDays: view.gracePeriodDays, lateFeePct: view.lateFeeBps / 100 } : undefined}
           onRepay={guard(actions.repay)}
           onPayOff={guard(actions.payOff)}
         />
@@ -414,6 +415,53 @@ function SimConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) =>
 
 
 
+const ZENROCK_MINT_URL = "https://app.zenrocklabs.io/services/zenzec/crucible/mint";
+const ZENZEC_MAINNET = "JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS";
+
+function ZcashBridge() {
+  const [open, setOpen] = useState(false);
+  const link = (href: string, text: string) => (
+    <a href={href} target="_blank" rel="noreferrer" className="underline decoration-dotted hover:text-ink">
+      {text}
+    </a>
+  );
+  return (
+    <div className="mt-2 text-[11px] leading-relaxed text-ink-soft">
+      <button onClick={() => setOpen((o) => !o)} className="num underline decoration-dotted hover:text-ink">
+        {open ? "Hide" : "Holding ZEC? Bring it from Zcash →"}
+      </button>
+      {open && (
+        <div className="mt-2 border border-rule bg-paper-2/60 p-3">
+          <p className="font-medium text-ink">From shielded ZEC to spending power, without selling</p>
+          <ol className="mt-1.5 list-decimal space-y-1 pl-4">
+            <li>Keep your ZEC shielded in Zashi or any Zcash wallet.</li>
+            <li>
+              Open {link(ZENROCK_MINT_URL, "Zenrock")} with this Solana wallet to get a ZEC deposit address bound to it. Send
+              at least 0.1 ZEC; after 3 Zcash confirmations (about 5 minutes) zenZEC is minted 1:1, held by a decentralized
+              MPC custody network.
+            </li>
+            <li>
+              Lock zenZEC here. It has its own risk tier, 40% max LTV against 50% for SOL, to price in bridge and liquidity
+              risk.
+            </li>
+            <li>Repay, unlock, and burn zenZEC on Zenrock: your ZEC comes back to a shielded address.</li>
+          </ol>
+          <p className="mt-2">
+            <span className="text-ink">Private:</span> your shielded balance and history. Sending from a shielded address
+            does not reveal where the ZEC came from. <span className="text-ink">Public:</span> the zenZEC you lock and your
+            loans on Solana, like any DeFi position.
+          </p>
+          <p className="mt-2">
+            On {DEPLOYMENT.cluster}, <em>Get test funds</em> gives you test zenZEC. On mainnet the vault takes Zenrock&apos;s
+            zenZEC ({link(`https://explorer.solana.com/address/${ZENZEC_MAINNET}`, `${ZENZEC_MAINNET.slice(0, 4)}…${ZENZEC_MAINNET.slice(-4)}`)})
+            as is: a classic SPL token with 8 decimals and no freeze authority.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Vault({
   state,
   balances,
@@ -499,20 +547,7 @@ function Vault({
           <Skel className="w-40" />
         )}
       </p>
-      {asset === "zenZEC" && (
-        <p className="mt-2 text-[11px] leading-relaxed text-ink-soft">
-          Holding ZEC? Send it from any Zcash wallet to a deposit address from{" "}
-          <a
-            href="https://app.zenrocklabs.io/services/zenzec/crucible/mint"
-            target="_blank"
-            rel="noreferrer"
-            className="underline decoration-dotted hover:text-ink"
-          >
-            Zenrock
-          </a>{" "}
-          and zenZEC lands in this wallet in about 5 minutes, 1:1 backed. Your ZEC is never sold.
-        </p>
-      )}
+      {asset === "zenZEC" && <ZcashBridge />}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           onClick={() => onDeposit(asset, x)}
@@ -722,7 +757,7 @@ function Receipt({ loan, pending }: { loan: Loan; pending?: boolean }) {
       <div className="dash my-2" />
       <Row k={loan.merchant} v={usd(loan.merchantReceived)} />
       <Row k="Collateral sold" v="0" />
-      <Row k="Taxable event" v="none" />
+      <Row k="Interest" v="0%" />
       <div className="dash my-2" />
       {loan.installments.map((i) => (
         <div key={i.index} className="num flex justify-between">
@@ -744,6 +779,7 @@ function Installments({
   loading,
   busy,
   creditBalance = 0,
+  overdueTerms,
   onRepay,
   onPayOff,
   onAdvance,
@@ -752,6 +788,8 @@ function Installments({
   loading?: boolean;
   busy?: boolean;
   creditBalance?: number;
+  /** On-chain terms for installments left unpaid: collected from collateral after the grace period. */
+  overdueTerms?: { graceDays: number; lateFeePct: number };
   onRepay: (id: string) => void;
   onPayOff?: (id: string) => void;
   onAdvance?: () => void;
@@ -783,6 +821,8 @@ function Installments({
             const left = outstanding(l);
             const next = l.installments.find((i) => i.paidAt === null);
             const overdue = next && next.dueAt < state.now - 24 * 60 * 60 * 1000;
+            const missed = overdueTerms && next && next.dueAt < state.now;
+            const collectAt = next && overdueTerms ? next.dueAt + overdueTerms.graceDays * 86_400_000 : 0;
             return (
               <div key={l.id} className="flex flex-wrap items-center gap-4 py-3">
                 <div className="min-w-44 flex-1">
@@ -834,6 +874,13 @@ function Installments({
                     </button>
                   )}
                 </div>
+                {missed && overdueTerms && (
+                  <p className="basis-full text-[11px] text-vermilion">
+                    {state.now < collectAt
+                      ? `Unpaid. If it is still unpaid on ${new Date(collectAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}, the keeper collects it from your collateral with a ${overdueTerms.lateFeePct}% late fee.`
+                      : `Past the ${overdueTerms.graceDays}-day grace period: the keeper is collecting it from your collateral with a ${overdueTerms.lateFeePct}% late fee.`}
+                  </p>
+                )}
               </div>
             );
           })}

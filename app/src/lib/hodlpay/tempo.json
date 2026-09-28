@@ -2,11 +2,26 @@
   "chainId": 42431,
   "rpc": "https://rpc.moderato.tempo.xyz",
   "explorer": "https://explore.testnet.tempo.xyz",
-  "settlement": "0x0a5cdea68a5acd2d070ba9a2e39299356408c402",
-  "deployBlock": 37207450,
+  "version": 2,
+  "settlement": "0xb3920ba511f21ecc6b7780d56a510a6328683de6",
+  "deployBlock": 37298917,
   "token": "0x20c0000000000000000000000000000000000001",
   "tokenSymbol": "AlphaUSD",
   "relayer": "0x51b09FbB59c8f300a16FA0c76d73EE5178fEe838",
+  "attesters": [
+    "0x022eacBf0154597BA260698Fed1B134008E8F4f7",
+    "0x63ed66c910aF2d6642EBcB2FdAA9A3C72cF70BF8",
+    "0x89B49a2182245F9b0a597882170dd818c76F9737"
+  ],
+  "threshold": 2,
+  "maxPerSettlement": 5000,
+  "dailyLimit": 50000,
+  "legacy": [
+    {
+      "settlement": "0x0a5cdea68a5acd2d070ba9a2e39299356408c402",
+      "deployBlock": 37207450
+    }
+  ],
   "merchants": {
     "Nomad Air": "0xe8d2467AE22E41C8646f1b224896bbDCd7Cb7604",
     "Kinfolk Studio": "0xB2161aaff54e65EC7eBC52955dfa5152FAa52Ef6",
@@ -16,9 +31,24 @@
     {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "relayer_",
-          "type": "address"
+          "internalType": "address[]",
+          "name": "attesters",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint8",
+          "name": "threshold_",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maxPerSettlement_",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "dailyLimit_",
+          "type": "uint256"
         }
       ],
       "stateMutability": "nonpayable",
@@ -31,12 +61,58 @@
     },
     {
       "inputs": [],
+      "name": "BadConfig",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "BadSignature",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "BelowThreshold",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "IsPaused",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "signer",
+          "type": "address"
+        }
+      ],
+      "name": "NotAttester",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotGuardian",
+      "type": "error"
+    },
+    {
+      "inputs": [],
       "name": "NotOwner",
       "type": "error"
     },
     {
       "inputs": [],
-      "name": "NotRelayer",
+      "name": "OverDailyLimit",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "OverPayoutCap",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "SignersNotSorted",
       "type": "error"
     },
     {
@@ -48,13 +124,76 @@
       "anonymous": false,
       "inputs": [
         {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "checkoutRef",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "address[]",
+          "name": "signers",
+          "type": "address[]"
+        },
+        {
           "indexed": false,
           "internalType": "address",
-          "name": "relayer",
+          "name": "submitter",
           "type": "address"
         }
       ],
-      "name": "RelayerChanged",
+      "name": "Attested",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "address[]",
+          "name": "attesters",
+          "type": "address[]"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint8",
+          "name": "threshold",
+          "type": "uint8"
+        }
+      ],
+      "name": "AttestersChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "maxPerSettlement",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "dailyLimit",
+          "type": "uint256"
+        }
+      ],
+      "name": "LimitsChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "paused",
+          "type": "bool"
+        }
+      ],
+      "name": "Paused",
       "type": "event"
     },
     {
@@ -90,12 +229,12 @@
     },
     {
       "inputs": [],
-      "name": "owner",
+      "name": "SETTLE_TYPEHASH",
       "outputs": [
         {
-          "internalType": "address",
+          "internalType": "bytes32",
           "name": "",
-          "type": "address"
+          "type": "bytes32"
         }
       ],
       "stateMutability": "view",
@@ -103,7 +242,46 @@
     },
     {
       "inputs": [],
-      "name": "relayer",
+      "name": "attesters",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "",
+          "type": "address[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "dailyLimit",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "domainSeparator",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "guardian",
       "outputs": [
         {
           "internalType": "address",
@@ -118,11 +296,112 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "relayer_",
+          "name": "",
           "type": "address"
         }
       ],
-      "name": "setRelayer",
+      "name": "isAttester",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "maxPerSettlement",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pause",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "paused",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address[]",
+          "name": "attesters_",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint8",
+          "name": "threshold_",
+          "type": "uint8"
+        }
+      ],
+      "name": "setAttesters",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "guardian_",
+          "type": "address"
+        }
+      ],
+      "name": "setGuardian",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "maxPerSettlement_",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "dailyLimit_",
+          "type": "uint256"
+        }
+      ],
+      "name": "setLimits",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -148,6 +427,11 @@
           "internalType": "uint256",
           "name": "amount",
           "type": "uint256"
+        },
+        {
+          "internalType": "bytes[]",
+          "name": "signatures",
+          "type": "bytes[]"
         }
       ],
       "name": "settle",
@@ -175,8 +459,101 @@
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "checkoutRef",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "merchant",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "settlementDigest",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "threshold",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "totalSettled",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "owner_",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "unpause",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "windowSpent",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "windowStart",
       "outputs": [
         {
           "internalType": "uint256",

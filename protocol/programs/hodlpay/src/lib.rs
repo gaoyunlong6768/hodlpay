@@ -68,6 +68,10 @@ pub mod hodlpay {
         liquidate::handle_liquidate(ctx, repay_amount)
     }
 
+    pub fn collect_overdue(ctx: Context<CollectOverdue>) -> Result<()> {
+        liquidate::handle_collect_overdue(ctx)
+    }
+
     pub fn check_health(ctx: Context<CheckHealth>) -> Result<()> {
         liquidate::handle_check_health(ctx)
     }

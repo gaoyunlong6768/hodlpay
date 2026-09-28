@@ -308,6 +308,146 @@ export type Hodlpay = {
       ]
     },
     {
+      "name": "collectOverdue",
+      "discriminator": [
+        45,
+        18,
+        232,
+        13,
+        83,
+        208,
+        46,
+        194
+      ],
+      "accounts": [
+        {
+          "name": "collector",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "position.owner",
+                "account": "position"
+              }
+            ]
+          },
+          "relations": [
+            "loan"
+          ]
+        },
+        {
+          "name": "loan",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "position"
+              },
+              {
+                "kind": "account",
+                "path": "loan.index",
+                "account": "loan"
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "docs": [
+            "Collateral asset the installment is collected from."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset.mint",
+                "account": "collateralAsset"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "collectorUsdc",
+          "writable": true
+        },
+        {
+          "name": "collectorCollateral",
+          "writable": true
+        },
+        {
+          "name": "liquidityVault",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "deposit",
       "discriminator": [
         242,
@@ -1306,6 +1446,19 @@ export type Hodlpay = {
       ]
     },
     {
+      "name": "overdueCollectedEvent",
+      "discriminator": [
+        146,
+        17,
+        35,
+        77,
+        30,
+        233,
+        34,
+        208
+      ]
+    },
+    {
       "name": "repayEvent",
       "discriminator": [
         129,
@@ -1414,6 +1567,11 @@ export type Hodlpay = {
       "code": 6018,
       "name": "priceUncertain",
       "msg": "Oracle confidence interval too wide"
+    },
+    {
+      "code": 6019,
+      "name": "notOverdue",
+      "msg": "Installment is not past its grace period"
     }
   ],
   "types": [
@@ -1830,6 +1988,56 @@ export type Hodlpay = {
           },
           {
             "name": "marginLimit",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "overdueCollectedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "loan",
+            "type": "pubkey"
+          },
+          {
+            "name": "collector",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "installment",
+            "type": "u8"
+          },
+          {
+            "name": "paid",
+            "docs": [
+              "Installment cash the collector paid into the pool on the borrower's behalf."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "fromCredit",
+            "type": "u64"
+          },
+          {
+            "name": "lateFee",
+            "type": "u64"
+          },
+          {
+            "name": "seized",
+            "docs": [
+              "Collateral taken from the borrower, worth `(paid + late_fee) * (1 + liquidation bonus)`."
+            ],
             "type": "u64"
           }
         ]

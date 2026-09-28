@@ -18,11 +18,11 @@
 
 **1:37 – 2:07 · How it makes money** (Lend card, pool stats)
 
-"The business model is classic BNPL. Merchants pay a 3% fee because installment options lift conversion. That fee goes to liquidity providers who fund every purchase, so USDC holders earn real merchant yield. Late payments add a small fee. Loans are overcollateralized and a keeper liquidates partially, only as a last resort, so credit losses stay near zero."
+"The business model is classic BNPL. Merchants pay a 3% fee because installment options lift conversion. That fee goes to liquidity providers who fund every purchase, so USDC holders earn real merchant yield. And what if someone doesn't pay? There's no collections agency: three days after a missed installment, the protocol collects exactly that installment from their collateral, plus a 1% late fee. Loans are overcollateralized and a keeper liquidates partially only as a last resort, so credit losses stay near zero."
 
 **2:07 – 2:32 · Why now, why these chains** (architecture slide)
 
-"Stablecoin checkout finally works. Solana gives us instant, cheap settlement and Pyth prices for real-time risk. Tempo is built for payments, so merchants who want Tempo stablecoins get paid there, with every payment tied back to its Solana checkout. And with zenZEC, ZEC holders can pay at checkout instead of taking an interest-bearing loan."
+"Stablecoin checkout finally works. Solana gives us instant, cheap settlement and Pyth prices for real-time risk. Tempo is built for payments, so merchants who want Tempo stablecoins get paid there: independent attesters verify each Solana checkout, and a public audit page ties every Tempo payment back to it. And with zenZEC, ZEC holders can pay at checkout instead of taking an interest-bearing loan."
 
 **2:32 – 2:52 · Ask** (face to camera)
 

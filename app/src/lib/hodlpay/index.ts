@@ -32,6 +32,8 @@ export const DEPLOYMENT = deployment as {
   solMint: string;
   /** Solana address of the Tempo relayer; checkouts on the Tempo rail settle to it. */
   tempoBridge?: string;
+  /** Unix time of the first transaction on this deployment. */
+  launchedAt?: number;
 };
 
 export const PROGRAM_ID = new PublicKey(DEPLOYMENT.programId);
@@ -305,6 +307,36 @@ export async function buildLiquidate(
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .remainingAccounts(assetMetas())
+      .instruction(),
+  ];
+}
+
+/** Settles an installment left unpaid past the grace period from `owner`'s `asset` collateral. */
+export async function buildCollectOverdue(
+  p: HodlpayProgram,
+  collector: PublicKey,
+  owner: PublicKey,
+  loanIndex: number,
+  asset: CollateralId,
+) {
+  const { mint } = MINTS[asset];
+  const position = pdas.position(owner);
+  return [
+    createAssociatedTokenAccountIdempotentInstruction(collector, ata(mint, collector), collector, mint),
+    await p.methods
+      .collectOverdue()
+      .accountsPartial({
+        collector,
+        config: pdas.config(),
+        position,
+        loan: pdas.loan(position, loanIndex),
+        asset: pdas.asset(mint),
+        vault: pdas.collateralVault(mint),
+        collectorUsdc: ata(USDC_MINT, collector),
+        collectorCollateral: ata(mint, collector),
+        liquidityVault: pdas.liquidity(),
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
       .instruction(),
   ];
 }

@@ -17,6 +17,9 @@ export default function SiteHeader() {
         <Link href="/merchant" className="hover:text-ink">
           Merchants
         </Link>
+        <Link href="/audit" className="hover:text-ink">
+          Audit
+        </Link>
         <span className="border border-ink px-2.5 py-1 text-ink">{DEPLOYMENT.cluster}</span>
       </nav>
     </header>

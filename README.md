@@ -4,7 +4,7 @@
 
 **Spend your crypto. Keep your crypto.**
 
-HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash on Solana) as collateral and get a stablecoin credit line they can use at any checkout. The merchant is paid upfront in USDC on Solana or in stablecoins on Tempo; the user repays in 4 interest-free installments. No selling, no taxable event, no credit check.
+HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash on Solana) as collateral and get a stablecoin credit line they can use at any checkout. The merchant is paid upfront in USDC on Solana or in stablecoins on Tempo; the user repays in 4 interest-free installments. No selling (so no capital-gains sale in most jurisdictions), no credit check.
 
 Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 
@@ -36,7 +36,8 @@ Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchan
 1. **Lock**: deposit SOL or zenZEC into an on-chain vault. Each asset has its own risk tier.
 2. **Pay**: at checkout the protocol pays the merchant from the liquidity pool, minus a 3% merchant fee. The merchant chooses the rail: USDC on Solana, or a TIP-20 stablecoin on Tempo.
 3. **Repay**: 4 installments, 14 days apart, 0% interest for the user. The first is paid in the checkout transaction itself (if the wallet holds too little USDC, it stays due that day). Paying more than 3 days after a due date adds a 1% late fee on that installment.
-4. **Protect**: the keeper posts oracle prices and emits a margin alert first; only past the liquidation line can a liquidator repay part of the debt (max 50% per call) and take collateral at a 5% bonus. Repaid amounts are credited to the user's upcoming installments.
+4. **Missed payment**: an installment still unpaid 3 days after its due date is collected from the borrower's collateral. `collect_overdue` is permissionless: the collector pays the installment plus the 1% late fee into the pool and receives collateral worth that amount plus the 5% bonus. The loan moves on to its next installment and the rest of the position is untouched, so a missed payment costs the borrower about 6% of one installment instead of a liquidation. The keeper runs it every hour.
+5. **Protect**: the keeper posts oracle prices and emits a margin alert first; only past the liquidation line can a liquidator repay part of the debt (max 50% per call) and take collateral at a 5% bonus. Repaid amounts are credited to the user's upcoming installments.
 
 | Asset  | Max LTV | Margin alert | Liquidation |
 | ------ | ------- | ------------ | ----------- |
@@ -92,17 +93,22 @@ Spending against crypto collateral already exists. What is different here is who
                            │ USDC          │ USDC + memo "hodlpay:tempo:<0x merchant>"
                            ▼               ▼
                      Solana merchant   Tempo bridge account
-                                           │ relayer verifies tx (amount + memo)
+                                           │ 3 attesters each re-read the tx through their own RPC
+                                           │ and sign the payout (EIP-712); any 2 suffice
                                            ▼
                     ┌────────────── Tempo ───────────────┐
                     │ HodlPaySettlement.sol              │
-                    │  settle(ref, merchant, token, amt) │
+                    │  settle(ref, merchant, token, amt, │
+                    │         2-of-3 signatures)         │
+                    │  per-payout + 24h caps, pause      │
                     │  transferWithMemo(merchant, ref)   │
                     │  replay-protected per Solana sig   │
                     └────────────────────────────────────┘
+                                           │
+                     /audit re-derives every payout from its Solana checkout
 
- Keeper (app/scripts/keeper.ts or /api/keeper): Pyth → refresh_price (or update_price), scan positions,
- margin alerts (Telegram), liquidate unhealthy positions.
+ Keeper (app/scripts/keeper.ts, /api/keeper, hourly Vercel cron): Pyth → refresh_price (or update_price),
+ collect overdue installments, margin alerts (Telegram), liquidate unhealthy positions.
 ```
 
 ### Repository
@@ -123,29 +129,33 @@ docs/       Go-to-market notes, pitch and demo video scripts
 | Liquidity | `deposit_liquidity`, `withdraw_liquidity`                      |
 | Position  | `open_position`, `deposit`, `withdraw`                         |
 | Credit    | `checkout`, `repay`                                            |
-| Risk      | `liquidate`, `check_health`                                    |
+| Risk      | `collect_overdue`, `liquidate`, `check_health` (all permissionless) |
 
 Valuation, credit limits and liquidation thresholds are computed on-chain from the position's collateral slots and per-asset oracle prices. Stale prices (older than `max_price_age`) block new credit, withdrawals and liquidations.
 
 ### Tempo rail
 
-When a merchant wants settlement on Tempo, checkout pays the Tempo bridge account on Solana and attaches a memo `hodlpay:tempo:<evm address>`. The relayer (`/api/tempo/settle`) reads the confirmed Solana transaction, accepts it only if it holds exactly one HodlPay `checkout` whose merchant account is the bridge, takes the amount from the on-chain loan (`merchant_received`) and the merchant from the memo, then calls `HodlPaySettlement.settle` on Tempo. The contract pays the merchant with `transferWithMemo`, using `keccak256(solana signature)` as the memo, so every Tempo payment points back to its Solana checkout and cannot be settled twice.
+When a merchant wants settlement on Tempo, checkout pays the Tempo bridge account on Solana and attaches a memo `hodlpay:tempo:<evm address>`, in the same transaction.
 
-Testnet deployment (Moderato, chain 42431): contract `0x0a5cdea68a5acd2d070ba9a2e39299356408c402`, paying AlphaUSD.
+1. **Attest.** Each of three attesters independently reads the confirmed Solana transaction through its own RPC endpoint, accepts it only if it holds exactly one HodlPay `checkout` whose merchant account is the bridge, takes the amount from the on-chain loan (`merchant_received`) and the merchant from the memo, and signs that exact payout as EIP-712 typed data: `Settle(checkoutRef, merchant, token, amount)` with `checkoutRef = keccak256(solana signature)`.
+2. **Settle.** Anyone can submit the payout with the signatures (`/api/tempo/settle` does it for the app). `HodlPaySettlement.settle` pays only with 2 valid, distinct attester signatures, at most once per checkout, up to 5,000 per payout and 50,000 per rolling 24 hours, and not while paused. It pays the merchant with `transferWithMemo`, using `checkoutRef` as the memo, so every Tempo payment points back to its Solana checkout.
+3. **Audit.** [`/audit`](https://hodlpay.vercel.app/audit) trusts neither the relayer nor the attesters: for every `Settled` event it finds the Solana transaction to the bridge whose signature hashes to the payout's `checkoutRef`, re-reads amount and merchant, and flags anything that does not match.
 
-Trust model: the relayer is a single trusted key today. The contract refuses to settle the same Solana checkout twice, and the relayer software only pays the USDC that actually reached the bridge account, but the contract trusts the relayer key for the amount and the key can delay or refuse a settlement. The path to removing it is to have several independent relayers co-sign `settle`, then to verify the Solana checkout through a light-client or attestation bridge once one is available on Tempo. Merchants who need no trust assumption at all can settle in USDC on Solana.
+Testnet deployment (Moderato, chain 42431): contract `0xb3920ba511f21ecc6b7780d56a510a6328683de6`, paying AlphaUSD. The first, single-relayer contract `0x0a5cdea68a5acd2d070ba9a2e39299356408c402` was drained into it; its payouts still appear in the portal and the audit. Seven of them paid for checkouts on a local test validator before the devnet launch, which is exactly what one relayer key could do and two independent attesters reading devnet will not.
+
+Trust model: the relayer key only pays gas; it cannot move funds without 2 attester signatures. A forged payout needs 2 of the 3 attester keys and is still bounded by the per-payout and daily caps, and a guardian can pause the contract. Attesters can delay a payout but not redirect it. In this demo all three attester keys are operated by HodlPay (on separate RPC endpoints), so the 2-of-3 threshold guards against one compromised key or one lying RPC, not against the operator. Next: hand attester keys to independent operators (a merchant acquirer, an LP, a Tempo validator), move contract ownership to a multisig with a timelock, then replace attesters with a Solana light client or attestation bridge once one runs on Tempo. Merchants who need no trust assumption at all can settle in USDC on Solana.
 
 ### Zcash (zenZEC)
 
-zenZEC is Zcash bridged to Solana by Zenrock: mainnet mint `JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` (SPL Token, 8 decimals). HodlPay lists it as its own collateral asset with a tighter risk tier than SOL (40% max LTV) because of thinner liquidity. There is no devnet zenZEC, so localnet and devnet use a test mint with the same decimals; on mainnet, bootstrap with `ZEC_MINT=JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` and the program uses the real token unchanged. ZEC prices come from the Pyth ZEC/USD feed.
+zenZEC is Zcash bridged to Solana by Zenrock: mainnet mint `JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` (classic SPL Token, 8 decimals, no freeze authority). HodlPay lists it as its own collateral asset with a tighter risk tier than SOL (40% max LTV) because of bridge risk and thinner liquidity. There is no devnet zenZEC, so localnet and devnet use a test mint with the same decimals. The program test `real_mainnet_zenzec_mint_is_accepted` loads the actual mainnet mint account (`protocol/programs/hodlpay/tests/fixtures/zenzec-mint.bin`), lists it, locks it and borrows against it, so on mainnet bootstrap with `ZEC_MINT=JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` and the program uses the real token unchanged. ZEC prices come from the Pyth ZEC/USD feed.
 
 Why it matters for ZEC holders: ZEC is a long-term privacy asset with almost nowhere to spend it. On Solana, holders can now borrow USDC against bridged ZEC on Kamino, but that is an open-ended loan at a variable rate, and the USDC still has to find its way to a merchant. With HodlPay a holder keeps the position and pays at checkout, interest-free in 4:
 
-1. Send ZEC from any Zcash wallet (shielded or transparent) to a personal deposit address from the [Zenrock mint page](https://app.zenrocklabs.io/services/zenzec/crucible/mint). zenZEC, 1:1 backed and held in decentralized MPC custody, arrives in the Solana wallet in about 5 minutes.
+1. Keep ZEC shielded in Zashi or any Zcash wallet. From the [Zenrock mint page](https://app.zenrocklabs.io/services/zenzec/crucible/mint), get a ZEC deposit address bound to your Solana wallet and send at least 0.1 ZEC. After 3 Zcash confirmations (about 5 minutes) zenZEC, 1:1 backed and held in decentralized MPC custody, arrives in the Solana wallet.
 2. Lock zenZEC in HodlPay. It gets its own risk tier and oracle feed, separate from SOL.
-3. Pay any merchant in 4. Repay and unlock, then redeem zenZEC back to ZEC on Zenrock.
+3. Pay any merchant in 4. Repay and unlock, then burn zenZEC on Zenrock to receive ZEC back at a shielded address.
 
-The console links to the Zenrock mint page whenever zenZEC is selected.
+What stays private and what does not: sending from a shielded address keeps the rest of the holder's Zcash balance and history hidden; the deposit does not reveal where the ZEC came from. On Solana, the zenZEC locked and the loans are public, like any DeFi position. HodlPay never asks for a Zcash address. The console walks through these steps whenever zenZEC is selected ("Holding ZEC? Bring it from Zcash").
 
 ## Run it locally
 
@@ -178,7 +188,7 @@ Open the console, press **Use demo wallet**, then **Get test funds**, then lock 
 
 Merchants: open `/merchant`, pick a demo merchant, generate a payment link and open it to pay as a shopper; the sale then shows up in the portal.
 
-`npm run smoke` runs the full flow headlessly against the configured cluster: permissionless Pyth refresh, LP deposit, faucet, deposits, checkout, repay, Tempo settlement with replay check, price shock, liquidation and LP withdrawal. To exercise `refresh_price` on localnet with real Pyth data, dump the sponsored feed accounts from mainnet and load them into the validator:
+`npm run smoke` runs the full flow headlessly against the configured cluster: permissionless Pyth refresh, LP deposit, faucet, deposits, checkout, repay, attested Tempo settlement with replay check, price shock, liquidation and LP withdrawal. Overdue collection needs time to pass, so it is covered by the LiteSVM test `overdue_installment_is_collected_from_collateral`. To exercise `refresh_price` on localnet with real Pyth data, dump the sponsored feed accounts from mainnet and load them into the validator:
 
 ```bash
 solana account -um 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE --output json -o sol-feed.json
@@ -205,7 +215,10 @@ The release profile builds with `opt-level = "z"` (about 390 KB), so the deploy 
 | `PYTH_API_KEY` | prices | Pyth Hermes; falls back to public market data |
 | `HODLPAY_CLUSTER`, `HODLPAY_RPC`, `NEXT_PUBLIC_RPC` | bootstrap | Target cluster and RPC written to `deployment.json` |
 | `USDC_MINT`, `ZEC_MINT` | bootstrap | Use existing mints (mainnet USDC / zenZEC) instead of test mints |
-| `TEMPO_PRIVATE_KEY` | Tempo relayer | Relayer key; defaults to `app/.hodlpay/tempo-key.json` |
+| `TEMPO_PRIVATE_KEY` | Tempo relayer | Relayer key (owner and gas payer); defaults to `app/.hodlpay/tempo-key.json` |
+| `TEMPO_ATTESTER_KEYS` | Tempo attesters | JSON array of the attester private keys; defaults to `app/.hodlpay/tempo-attesters.json` (created by `npm run tempo:deploy`) |
+| `TEMPO_ATTESTER_RPC_3` | Tempo attesters | Solana RPC for the third attester (the first two use `SOLANA_RPC` and the public RPC) |
+| `CRON_SECRET` | `/api/cron/keeper` | If set, the hourly keeper sweep requires `Authorization: Bearer <secret>` (Vercel Cron sends it) |
 | `HODLPAY_STATE_DIR` | API routes | Writable dir for demo state (use `/tmp` on serverless) |
 | `SOLANA_RPC` | API routes | Private RPC for server-side calls; browsers reach it through `/api/rpc` (method allowlist, per-IP limit, falls back to the public RPC from `deployment.json` when rate-limited) |
 | `FAUCET_RESERVE_SOL` | faucet | Admin SOL kept for keeper fees; the faucet pauses below it (default 1) |
@@ -220,12 +233,12 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 | Custody | Collateral and pool USDC sit in program-owned PDAs. There is no admin instruction that can move them; only the position owner (withdraw, repay), LPs (their share of idle liquidity) and liquidators (past the liquidation line) move funds. The program's upgrade authority is still a single key. | Upgrade authority to a multisig with a timelock, then freeze. |
 | Oracle | `refresh_price` is permissionless and fully checks Pyth updates. `update_price` lets the keeper key post any positive price; the demo uses it for the stress test and for assets without a fresh sponsored feed. A compromised keeper key could therefore trigger liquidations. | Pyth-only pricing (remove or bound `update_price`), plus a confidence and deviation guard against the last price. |
 | Liquidation | The `liquidate` instruction is permissionless, capped at 50% of debt per call with a 5% bonus. On the demo site the keeper only liquidates the position of the visitor who presses the button, so one visitor's stress test never liquidates another's position. | Open liquidation to any bot; keeper becomes one liquidator among many. |
-| Tempo rail | A single relayer key settles on Tempo (see [Tempo rail](#tempo-rail)); the contract blocks double settlement but trusts the relayer for the amount. | Several co-signing relayers, then light-client or attestation verification. |
+| Tempo rail | Payouts need 2 of 3 attester signatures, each attester verifying the Solana checkout itself, under per-payout and daily caps, and `/audit` reconciles every payout (see [Tempo rail](#tempo-rail)). All three attester keys are run by HodlPay in this demo. | Independent attester operators and a multisig owner, then light-client or attestation-bridge verification. |
 | Collateral | Devnet uses test USDC and test zenZEC mints the admin can mint. | Real USDC and Zenrock zenZEC (`ZEC_MINT`), no mint authority. |
 | Demo operations | The site's faucet and keeper are paid by one devnet admin wallet; the faucet pauses below 1 SOL so price updates keep running. The stress test shifts the shared devnet oracle and reverts to live prices after 3 minutes. | Not applicable on mainnet (no faucet, no stress test). |
-| Credit risk | Installment plans are over-collateralized (max LTV 40–50%), there is no credit scoring, and a 1% late fee is the only penalty besides liquidation. A missed installment is not enforced on its own: it accrues the late fee when paid, but only the LTV can trigger a liquidation. | Tune tiers on live volatility data; add a reserve fund from part of the merchant fee; make a long-overdue installment liquidatable. |
+| Credit risk | Installment plans are over-collateralized (max LTV 40–50%) and there is no credit scoring. A missed installment is collected from collateral 3 days after its due date (`collect_overdue`, 1% late fee plus the 5% collector bonus); if no single collateral asset can cover it, the position is left to regular liquidation. | Tune tiers on live volatility data; add a reserve fund from part of the merchant fee. |
 | Bad debt | If a crash seizes all collateral and debt remains, `liquidate` writes it off: the debt leaves the pool's books (`bad_debt` in the event) and the LP pool absorbs the loss. Liquidation proceeds already credited to the position still pay down later installments. | Reserve fund covers write-offs before LPs. |
-| LP pool | Merchant fees accrue to LP shares on checkout, so a deposit just before a large checkout captures part of its fee. The share price cannot be inflated by a first depositor because the pool is seeded at bootstrap. | Stream fees over the installment term; minimum-liquidity lock on new pools. |
+| LP pool | Merchant fees are earned installment by installment, so a deposit around a checkout captures none of its fee. The share price cannot be inflated by a first depositor because the pool is seeded at bootstrap. | Minimum-liquidity lock on new pools. |
 | Assets | Only classic SPL Token mints (not Token-2022) can be listed. | Token-2022 support when a listed asset needs it. |
 
 ## Roadmap

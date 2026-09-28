@@ -120,6 +120,10 @@ impl Loan {
         }
     }
 
+    pub fn is_overdue(&self, now: i64, grace_period: i64) -> bool {
+        self.installments_paid < self.installments_total && now > self.next_due_at + grace_period
+    }
+
     pub fn next_installment(&self) -> Result<u64> {
         require!(self.installments_paid < self.installments_total, ErrorCode::LoanRepaid);
         if self.installments_paid + 1 == self.installments_total {
@@ -147,6 +151,21 @@ pub struct RepayEvent {
     pub paid: u64,
     pub from_credit: u64,
     pub late_fee: u64,
+}
+
+#[event]
+pub struct OverdueCollectedEvent {
+    pub owner: Pubkey,
+    pub loan: Pubkey,
+    pub collector: Pubkey,
+    pub mint: Pubkey,
+    pub installment: u8,
+    /// Installment cash the collector paid into the pool on the borrower's behalf.
+    pub paid: u64,
+    pub from_credit: u64,
+    pub late_fee: u64,
+    /// Collateral taken from the borrower, worth `(paid + late_fee) * (1 + liquidation bonus)`.
+    pub seized: u64,
 }
 
 #[event]

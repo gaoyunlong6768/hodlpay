@@ -17,6 +17,7 @@ import {
   USDC_MINT,
   ZEC_MINT,
   ata,
+  buildCollectOverdue,
   buildLiquidate,
   buildRefreshPrice,
   pythFeedAccount,
@@ -229,6 +230,82 @@ export async function liquidatePosition(h: Health) {
   );
   const sig = await send(p, t);
   return { sig, repaid: repay, asset: h.largest };
+}
+
+export interface Collection {
+  owner: string;
+  loan: string;
+  installment: number;
+  sig?: string;
+  paid?: number;
+  lateFee?: number;
+  seized?: number;
+  asset?: CollateralId;
+  error?: string;
+}
+
+const MAX_COLLECTIONS_PER_PASS = 8;
+
+/**
+ * Collects every installment left unpaid past the grace period from the
+ * borrower's collateral (`collect_overdue`), for one owner or all positions.
+ * The keeper fronts the USDC and takes collateral worth it plus the bonus.
+ * Prices must be fresh: call after `postPrices`.
+ */
+export async function collectOverdue(owner?: string): Promise<Collection[]> {
+  const { program: p, admin } = adminProgram();
+  const cfg = await fetchConfig(p);
+  const now = Math.floor(Date.now() / 1000);
+  const filters = owner ? [{ memcmp: { offset: 8 + 32, bytes: owner } }] : [];
+  const overdue = (await p.account.loan.all(filters))
+    .filter(({ account: l }) => l.installmentsPaid < l.installmentsTotal && now > l.nextDueAt.toNumber() + cfg.gracePeriod)
+    .sort((a, b) => a.account.nextDueAt.cmp(b.account.nextDueAt));
+
+  const out: Collection[] = [];
+  const assets = await fetchAssets(p);
+  for (const { publicKey, account: l } of overdue) {
+    for (let due = l.installmentsPaid; due < l.installmentsTotal && out.length < MAX_COLLECTIONS_PER_PASS; due++) {
+      if (now <= l.nextDueAt.toNumber() + (due - l.installmentsPaid) * cfg.installmentInterval + cfg.gracePeriod) break;
+      const base = { owner: l.owner.toBase58(), loan: publicKey.toBase58(), installment: due + 1 };
+      try {
+        const pos = await p.account.position.fetch(l.position);
+        const last = due + 1 === l.installmentsTotal;
+        const amount = BigInt((last ? l.principal.sub(l.installmentAmount.muln(l.installmentsTotal - 1)) : l.installmentAmount).toString());
+        const credit = BigInt(pos.creditBalance.toString());
+        const cash = amount > credit ? amount - credit : BigInt(0);
+        const lateFee = (cash * BigInt(cfg.lateFeeBps)) / BigInt(10_000);
+        const owed = cash + lateFee;
+        const need = (Number(owed) / 10 ** USDC_DECIMALS) * (1 + cfg.liquidationBonusBps / 10_000) * 1.001;
+        const values = (Object.keys(MINTS) as CollateralId[]).map((id) => {
+          const slot = pos.mints.findIndex((m) => m.equals(MINTS[id].mint));
+          const held = slot < 0 ? 0 : Number(pos.amounts[slot].toString()) / 10 ** MINTS[id].decimals;
+          return { id, value: held * assets[id].price };
+        });
+        const pick = values.sort((a, b) => b.value - a.value).find((v) => v.value >= need);
+        if (owed > BigInt(0) && !pick) throw new Error("No single collateral asset covers this installment; left to liquidation");
+        const asset = pick?.id ?? values[0].id;
+        const usdcAta = ata(USDC_MINT, admin.publicKey);
+        const t = tx(
+          createAssociatedTokenAccountIdempotentInstruction(admin.publicKey, usdcAta, admin.publicKey, USDC_MINT),
+          ...(owed > BigInt(0) ? [createMintToInstruction(USDC_MINT, usdcAta, admin.publicKey, owed)] : []),
+          ...(await buildCollectOverdue(p, admin.publicKey, l.owner, l.index, asset)),
+        );
+        const sig = await send(p, t);
+        out.push({
+          ...base,
+          sig,
+          paid: Number(cash) / 10 ** USDC_DECIMALS,
+          lateFee: Number(lateFee) / 10 ** USDC_DECIMALS,
+          seized: need / 1.001 / assets[asset].price,
+          asset,
+        });
+      } catch (e) {
+        out.push({ ...base, error: (e as Error).message });
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 export { connection };

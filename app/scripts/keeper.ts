@@ -1,13 +1,14 @@
 /**
  * HodlPay keeper: posts oracle prices, watches every position, sends margin
- * alerts and liquidates unhealthy positions.
+ * alerts, collects overdue installments from collateral and liquidates
+ * unhealthy positions.
  *
  *   npx tsx scripts/keeper.ts            # loop
  *   npx tsx scripts/keeper.ts --once     # single pass
  *
  * Optional: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to push margin alerts.
  */
-import { adminProgram, liquidatePosition, postPrices, scanPositions, type Health } from "../src/lib/server/admin";
+import { adminProgram, collectOverdue, liquidatePosition, postPrices, scanPositions, type Health } from "../src/lib/server/admin";
 import { usd } from "../src/lib/engine";
 
 const INTERVAL = Number(process.env.KEEPER_INTERVAL_MS ?? 15_000);
@@ -31,6 +32,12 @@ async function tick() {
   console.log(
     `[${t}] prices SOL ${usd(posted.prices.SOL * (1 + posted.shock))} ZEC ${usd(posted.prices.zenZEC * (1 + posted.shock))} (${posted.source}${shock})`,
   );
+
+  for (const c of await collectOverdue()) {
+    const short = `${c.owner.slice(0, 4)}…${c.owner.slice(-4)}`;
+    if (c.error) console.error(`  overdue collection failed for ${short} installment #${c.installment}: ${c.error}`);
+    else await alert(`HodlPay collected overdue installment #${c.installment} for ${short} from ${c.asset} collateral: ${usd(c.paid!)} + ${usd(c.lateFee!)} late fee. tx ${c.sig}`);
+  }
 
   const { program } = adminProgram();
   for (const h of await scanPositions(program)) {

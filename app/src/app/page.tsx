@@ -24,7 +24,7 @@ export default function Home() {
           </h1>
           <p className="rise mt-6 max-w-xl text-lg text-ink-soft" style={{ animationDelay: "160ms" }}>
             HodlPay turns SOL and zenZEC into a stablecoin credit line you can use at any checkout. No selling, no
-            taxable event, no credit check. Merchants get paid upfront on Solana or Tempo.
+            credit check, no interest. Merchants get paid upfront on Solana or Tempo.
           </p>
           <div className="rise mt-8 flex flex-wrap gap-3" style={{ animationDelay: "240ms" }}>
             <a href="#console" className="bg-ink px-5 py-3 text-sm font-medium text-paper transition hover:bg-mint">

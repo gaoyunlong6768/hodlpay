@@ -149,7 +149,7 @@ pub struct Repay<'info> {
 pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     let due = ctx.accounts.loan.next_installment()?;
     let now = Clock::get()?.unix_timestamp;
-    let late = now > ctx.accounts.loan.next_due_at + ctx.accounts.config.grace_period;
+    let late = ctx.accounts.loan.is_overdue(now, ctx.accounts.config.grace_period);
     let p = &mut ctx.accounts.position;
     let from_credit = due.min(p.credit_balance);
     let cash = due - from_credit;
@@ -170,20 +170,9 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
         )?;
     }
 
-    p.credit_balance -= from_credit;
-    p.debt = p.debt.saturating_sub(cash);
-    let loan = &mut ctx.accounts.loan;
-    let fee_earned = loan.fee_for(due);
     let config = &mut ctx.accounts.config;
-    config.total_debt = config.total_debt.saturating_sub(cash);
-    config.unearned_fees = config.unearned_fees.saturating_sub(fee_earned);
-    config.fees_earned += fee_earned + late_fee;
-
-    loan.installments_paid += 1;
-    loan.repaid += due;
-    loan.late_fees_paid += late_fee;
-    loan.fee_earned += fee_earned;
-    loan.next_due_at += config.installment_interval;
+    let loan = &mut ctx.accounts.loan;
+    settle_installment(config, p, loan, due, from_credit, late_fee);
 
     emit!(RepayEvent {
         owner: p.owner,
@@ -194,4 +183,29 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
         late_fee,
     });
     Ok(())
+}
+
+/// Books one installment of `due` as paid, `from_credit` of it from liquidation
+/// credit and the rest in cash, and releases its share of the merchant fee.
+pub fn settle_installment(
+    config: &mut Config,
+    p: &mut Position,
+    loan: &mut Loan,
+    due: u64,
+    from_credit: u64,
+    late_fee: u64,
+) {
+    let cash = due - from_credit;
+    p.credit_balance -= from_credit;
+    p.debt = p.debt.saturating_sub(cash);
+    let fee_earned = loan.fee_for(due);
+    config.total_debt = config.total_debt.saturating_sub(cash);
+    config.unearned_fees = config.unearned_fees.saturating_sub(fee_earned);
+    config.fees_earned += fee_earned + late_fee;
+
+    loan.installments_paid += 1;
+    loan.repaid += due;
+    loan.late_fees_paid += late_fee;
+    loan.fee_earned += fee_earned;
+    loan.next_due_at += config.installment_interval;
 }

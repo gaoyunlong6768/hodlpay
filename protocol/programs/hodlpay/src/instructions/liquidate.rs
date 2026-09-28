@@ -4,6 +4,7 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use crate::{
     constants::*,
     error::ErrorCode,
+    instructions::credit::settle_installment,
     math::{amount_for_value, apply_bps, valuate, value_e6},
     state::*,
 };
@@ -118,6 +119,115 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, repay_amount: u64) -> Result<()
         repaid: repay,
         seized: seize,
         bad_debt,
+    });
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct CollectOverdue<'info> {
+    pub collector: Signer<'info>,
+    #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(mut, seeds = [POSITION_SEED, position.owner.as_ref()], bump = position.bump)]
+    pub position: Box<Account<'info, Position>>,
+    #[account(
+        mut,
+        seeds = [LOAN_SEED, position.key().as_ref(), &loan.index.to_le_bytes()],
+        bump = loan.bump,
+        has_one = position
+    )]
+    pub loan: Box<Account<'info, Loan>>,
+    /// Collateral asset the installment is collected from.
+    #[account(mut, seeds = [ASSET_SEED, asset.mint.as_ref()], bump = asset.bump)]
+    pub asset: Box<Account<'info, CollateralAsset>>,
+    #[account(mut, address = asset.vault)]
+    pub vault: Box<Account<'info, TokenAccount>>,
+    #[account(mut, token::mint = config.usdc_mint, token::authority = collector)]
+    pub collector_usdc: Box<Account<'info, TokenAccount>>,
+    #[account(mut, token::mint = asset.mint, token::authority = collector)]
+    pub collector_collateral: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = config.liquidity_vault)]
+    pub liquidity_vault: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+}
+
+/// Settles an installment the borrower left unpaid past the grace period, from
+/// their collateral: anyone pays the installment plus its late fee into the pool
+/// and receives collateral worth that amount plus the liquidation bonus. The loan
+/// moves on to its next installment; the rest of the position is untouched.
+pub fn handle_collect_overdue(ctx: Context<CollectOverdue>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let config = &ctx.accounts.config;
+    let loan = &ctx.accounts.loan;
+    let due = loan.next_installment()?;
+    require!(loan.is_overdue(now, config.grace_period), ErrorCode::NotOverdue);
+
+    let from_credit = due.min(ctx.accounts.position.credit_balance);
+    let cash = due - from_credit;
+    let late_fee = apply_bps(cash, config.late_fee_bps);
+    let owed = cash + late_fee;
+
+    let asset = &ctx.accounts.asset;
+    let mut seize = 0;
+    if owed > 0 {
+        require!(
+            now.saturating_sub(asset.price_updated_at) <= config.max_price_age,
+            ErrorCode::StalePrice
+        );
+        let slot = ctx
+            .accounts
+            .position
+            .slot_of(&asset.mint)
+            .ok_or(ErrorCode::AssetNotInPosition)?;
+        let seize_value = apply_bps(owed, BPS as u16 + config.liquidation_bonus_bps);
+        seize = amount_for_value(seize_value, asset.price_e6, asset.decimals)?;
+        require!(seize > 0, ErrorCode::ZeroAmount);
+        require!(seize <= ctx.accounts.position.amounts[slot], ErrorCode::InsufficientCollateral);
+
+        token::transfer(
+            CpiContext::new(
+                token::ID,
+                Transfer {
+                    from: ctx.accounts.collector_usdc.to_account_info(),
+                    to: ctx.accounts.liquidity_vault.to_account_info(),
+                    authority: ctx.accounts.collector.to_account_info(),
+                },
+            ),
+            owed,
+        )?;
+        let seeds: &[&[u8]] = &[CONFIG_SEED, &[config.bump]];
+        token::transfer(
+            CpiContext::new_with_signer(
+                token::ID,
+                Transfer {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.collector_collateral.to_account_info(),
+                    authority: ctx.accounts.config.to_account_info(),
+                },
+                &[seeds],
+            ),
+            seize,
+        )?;
+        ctx.accounts.position.amounts[slot] -= seize;
+        ctx.accounts.asset.total_deposited -= seize;
+    }
+
+    let mint = ctx.accounts.asset.mint;
+    let config = &mut ctx.accounts.config;
+    let p = &mut ctx.accounts.position;
+    let loan = &mut ctx.accounts.loan;
+    settle_installment(config, p, loan, due, from_credit, late_fee);
+
+    emit!(OverdueCollectedEvent {
+        owner: p.owner,
+        loan: loan.key(),
+        collector: ctx.accounts.collector.key(),
+        mint,
+        installment: loan.installments_paid,
+        paid: cash,
+        from_credit,
+        late_fee,
+        seized: seize,
     });
     Ok(())
 }

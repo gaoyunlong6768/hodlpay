@@ -40,4 +40,6 @@ pub enum ErrorCode {
     FeedMismatch,
     #[msg("Oracle confidence interval too wide")]
     PriceUncertain,
+    #[msg("Installment is not past its grace period")]
+    NotOverdue,
 }

@@ -218,6 +218,18 @@ fn move_collateral(env: &mut Env, u: &User, mint: Pubkey, user_token: Pubkey, am
 }
 
 fn checkout(env: &mut Env, u: &User, merchant: &Pubkey, merchant_usdc: Pubkey, amount: u64) -> Result<Pubkey, String> {
+    let assets = [pda(&[ASSET_SEED, env.sol.as_ref()]), pda(&[ASSET_SEED, env.zec.as_ref()])];
+    checkout_valued(env, u, merchant, merchant_usdc, amount, &assets)
+}
+
+fn checkout_valued(
+    env: &mut Env,
+    u: &User,
+    merchant: &Pubkey,
+    merchant_usdc: Pubkey,
+    amount: u64,
+    assets: &[Pubkey],
+) -> Result<Pubkey, String> {
     let p: Position = read(&env.svm, &u.position);
     let loan = pda(&[LOAN_SEED, u.position.as_ref(), &p.loan_count.to_le_bytes()]);
     send(
@@ -235,7 +247,7 @@ fn checkout(env: &mut Env, u: &User, merchant: &Pubkey, merchant_usdc: Pubkey, a
                 token_program: anchor_spl::token::ID,
                 system_program: anchor_lang::system_program::ID,
             },
-            &[pda(&[ASSET_SEED, env.sol.as_ref()]), pda(&[ASSET_SEED, env.zec.as_ref()])],
+            assets,
         ),
         &[&u.kp],
     )?;
@@ -299,6 +311,87 @@ fn liquidate(env: &mut Env, liquidator: &User, owner: &User, repay_amount: u64) 
         ),
         &[&liquidator.kp],
     )
+}
+
+fn collect_overdue(env: &mut Env, collector: &User, owner: &User, loan: Pubkey) -> Result<(), String> {
+    send(
+        &mut env.svm,
+        ix(
+            hodlpay::instruction::CollectOverdue {},
+            hodlpay::accounts::CollectOverdue {
+                collector: collector.kp.pubkey(),
+                config: pda(&[CONFIG_SEED]),
+                position: owner.position,
+                loan,
+                asset: pda(&[ASSET_SEED, env.sol.as_ref()]),
+                vault: pda(&[COLLATERAL_VAULT_SEED, env.sol.as_ref()]),
+                collector_usdc: collector.usdc_ata,
+                collector_collateral: collector.sol_ata,
+                liquidity_vault: pda(&[LIQUIDITY_SEED]),
+                token_program: anchor_spl::token::ID,
+            },
+            &[],
+        ),
+        &[&collector.kp],
+    )
+}
+
+fn advance(env: &mut Env, secs: i64) {
+    let mut clock: anchor_lang::prelude::Clock = env.svm.get_sysvar();
+    clock.unix_timestamp += secs;
+    env.svm.set_sysvar(&clock);
+}
+
+#[test]
+fn overdue_installment_is_collected_from_collateral() {
+    let mut env = setup();
+    let frank = new_user(&mut env, 25 * SOL, 0);
+    let merchant = Keypair::new();
+    let merchant_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&merchant.pubkey())
+        .send()
+        .unwrap();
+    let (sol, sol_ata) = (env.sol, frank.sol_ata);
+    move_collateral(&mut env, &frank, sol, sol_ata, 25 * SOL, false).unwrap();
+    let loan = checkout(&mut env, &frank, &merchant.pubkey(), merchant_usdc, 800 * USDC).unwrap();
+    let keeper = new_user(&mut env, 0, 10_000 * USDC);
+
+    // The first installment is due at checkout; within the 3-day grace it cannot be collected.
+    advance(&mut env, 3 * DAY);
+    set_price(&mut env, sol, 100 * USDC);
+    assert!(collect_overdue(&mut env, &keeper, &frank, loan).is_err());
+
+    // Past the grace period the keeper pays $200 + $2 late fee and takes $212.10 of SOL (5% bonus).
+    advance(&mut env, 1);
+    set_price(&mut env, sol, 100 * USDC);
+    let pool_before = balance(&env.svm, &pda(&[LIQUIDITY_SEED]));
+    collect_overdue(&mut env, &keeper, &frank, loan).unwrap();
+    assert_eq!(balance(&env.svm, &keeper.usdc_ata), 9_798 * USDC);
+    assert_eq!(balance(&env.svm, &keeper.sol_ata), 2_121_000_000);
+    assert_eq!(balance(&env.svm, &pda(&[LIQUIDITY_SEED])) - pool_before, 202 * USDC);
+
+    let p: Position = read(&env.svm, &frank.position);
+    assert_eq!(p.debt, 600 * USDC);
+    assert_eq!(p.amounts[0], 25 * SOL - 2_121_000_000);
+    let l: Loan = read(&env.svm, &loan);
+    assert_eq!(l.installments_paid, 1);
+    assert_eq!(l.late_fees_paid, 2 * USDC);
+    assert_eq!(l.fee_earned, 6 * USDC);
+    let c: hodlpay::state::Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    assert_eq!(c.fees_earned, 8 * USDC);
+    assert_eq!(c.total_debt, 600 * USDC);
+
+    // The next installment is not due for another 14 days, so it cannot be collected twice.
+    assert!(collect_overdue(&mut env, &keeper, &frank, loan).is_err());
+
+    // Frank can still pay the rest himself.
+    MintTo::new(&mut env.svm, &env.admin, &env.usdc, &frank.usdc_ata, 600 * USDC).send().unwrap();
+    for _ in 0..3 {
+        repay(&mut env, &frank, loan).unwrap();
+    }
+    let p: Position = read(&env.svm, &frank.position);
+    assert_eq!(p.debt, 0);
+    assert!(collect_overdue(&mut env, &keeper, &frank, loan).is_err());
 }
 
 #[test]
@@ -437,6 +530,76 @@ fn zcash_collateral_adds_credit() {
     assert!(checkout(&mut env, &carol, &merchant.pubkey(), merchant_usdc, 1_201 * USDC).is_err());
     checkout(&mut env, &carol, &merchant.pubkey(), merchant_usdc, 1_200 * USDC).unwrap();
     assert_eq!(balance(&env.svm, &merchant_usdc), 1_164 * USDC);
+}
+
+/// The real zenZEC mint (Zenrock) as it exists on Solana mainnet: classic SPL
+/// Token, 8 decimals, no freeze authority. Account data copied from mainnet-beta.
+const ZENZEC_MAINNET: Pubkey = anchor_lang::prelude::pubkey!("JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS");
+
+#[test]
+fn real_mainnet_zenzec_mint_is_accepted() {
+    let mut env = setup();
+    let zen = ZENZEC_MAINNET;
+    let mint_account = solana_account::Account {
+        lamports: 1_461_600,
+        data: include_bytes!("fixtures/zenzec-mint.bin").to_vec(),
+        owner: anchor_spl::token::ID,
+        executable: false,
+        rent_epoch: 0,
+    };
+    env.svm.set_account(zen, mint_account).unwrap();
+
+    let config = pda(&[CONFIG_SEED]);
+    let asset = pda(&[ASSET_SEED, zen.as_ref()]);
+    send(
+        &mut env.svm,
+        ix(
+            hodlpay::instruction::AddAsset {
+                args: AddAssetArgs {
+                    max_ltv_bps: 4_000,
+                    margin_ltv_bps: 5_500,
+                    liquidation_ltv_bps: 6_500,
+                    price_e6: 300 * USDC,
+                    pyth_feed_id: [0u8; 32],
+                },
+            },
+            hodlpay::accounts::AddAsset {
+                admin: env.admin.pubkey(),
+                config,
+                mint: zen,
+                asset,
+                vault: pda(&[COLLATERAL_VAULT_SEED, zen.as_ref()]),
+                token_program: anchor_spl::token::ID,
+                system_program: anchor_lang::system_program::ID,
+            },
+            &[],
+        ),
+        &[&env.admin],
+    )
+    .unwrap();
+    let a: hodlpay::state::CollateralAsset = read(&env.svm, &asset);
+    assert_eq!(a.decimals, 8);
+
+    // A holder who minted 2 zenZEC through Zenrock (balance written directly: we don't hold the mint authority).
+    let gina = new_user(&mut env, 0, 0);
+    let zen_ata = CreateAssociatedTokenAccount::new(&mut env.svm, &gina.kp, &zen).send().unwrap();
+    let mut acc = env.svm.get_account(&zen_ata).unwrap();
+    acc.data[64..72].copy_from_slice(&(2 * 100_000_000u64).to_le_bytes());
+    env.svm.set_account(zen_ata, acc).unwrap();
+
+    move_collateral(&mut env, &gina, zen, zen_ata, 2 * 100_000_000, false).unwrap();
+    assert_eq!(balance(&env.svm, &pda(&[COLLATERAL_VAULT_SEED, zen.as_ref()])), 2 * 100_000_000);
+
+    // 2 zenZEC @ $300 = $600 at 40% max LTV = $240 of credit.
+    let merchant = Keypair::new();
+    let merchant_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&merchant.pubkey())
+        .send()
+        .unwrap();
+    let assets = [pda(&[ASSET_SEED, env.sol.as_ref()]), pda(&[ASSET_SEED, env.zec.as_ref()]), asset];
+    assert!(checkout_valued(&mut env, &gina, &merchant.pubkey(), merchant_usdc, 241 * USDC, &assets).is_err());
+    checkout_valued(&mut env, &gina, &merchant.pubkey(), merchant_usdc, 240 * USDC, &assets).unwrap();
+    assert_eq!(balance(&env.svm, &merchant_usdc), 232_800_000);
 }
 
 #[test]

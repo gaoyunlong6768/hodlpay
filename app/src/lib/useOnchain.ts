@@ -21,6 +21,18 @@ export const CATALOG = [
 
 type LoanMeta = { merchant: string; item: string; rail: Rail; tempoSig?: string; tempoTx?: string };
 
+interface Collection {
+  owner: string;
+  loan: string;
+  installment: number;
+  sig?: string;
+  paid?: number;
+  lateFee?: number;
+  seized?: number;
+  asset?: AssetId;
+  error?: string;
+}
+
 export interface PendingTempo {
   loan: string;
   merchant: string;
@@ -226,12 +238,24 @@ export function useOnchain() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "keeper failed");
-      return body as {
+      const r = body as {
         posted: { sig: string } | null;
+        collections: Collection[];
         liquidations: { owner: string; sig?: string; repaid?: number; asset?: AssetId; error?: string }[];
       };
+      const meta = load<Record<string, LoanMeta>>(metaKey, {});
+      for (const c of r.collections ?? []) {
+        if (c.owner !== owner || !c.sig) continue;
+        const item = meta[c.loan]?.item ?? "a purchase";
+        log(
+          "liquidation",
+          `Installment #${c.installment} of ${item} was overdue: the keeper paid ${usd(c.paid ?? 0)} + ${usd(c.lateFee ?? 0)} late fee from your collateral (${(c.seized ?? 0).toFixed(4)} ${c.asset}, incl. 5% bonus)`,
+          c.sig,
+        );
+      }
+      return r;
     },
-    [owner],
+    [owner, metaKey, log],
   );
 
   useEffect(() => {
