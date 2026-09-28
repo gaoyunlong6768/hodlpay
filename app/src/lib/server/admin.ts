@@ -72,6 +72,13 @@ export function getShock(): number {
   return Number(JSON.parse(readFileSync(/*turbopackIgnore: true*/ f, "utf8")).shock) || 0;
 }
 
+/** Validates a stress-test shock from a request; `undefined` means no shock. */
+export function parseShock(v: unknown): number | null {
+  if (v === undefined || v === null) return 0;
+  const s = Number(v);
+  return Number.isFinite(s) && s >= -0.9 && s <= 1 ? s : null;
+}
+
 export function setShock(shock: number) {
   mkdirSync(/*turbopackIgnore: true*/ STATE_DIR, { recursive: true });
   writeFileSync(/*turbopackIgnore: true*/ path.join(STATE_DIR, "shock.json"), JSON.stringify({ shock }));
@@ -101,10 +108,9 @@ async function freshPythFeeds(p: HodlpayProgram, maxAge: number) {
  * permissionless `refresh_price`; the rest (and all assets while a demo stress
  * shock is active) get a keeper-posted price.
  */
-export async function postPrices() {
+export async function postPrices(shock = getShock()) {
   const { program: p, admin } = adminProgram();
   const quote = await getPrices();
-  const shock = getShock();
   const cfg = await fetchConfig(p);
   const pyth = shock === 0 ? await freshPythFeeds(p, cfg.maxPriceAge) : new Map<CollateralId, PublicKey>();
   const ixs = await Promise.all(
@@ -122,11 +128,16 @@ export async function postPrices() {
 }
 
 export const FAUCET = { usdc: 2_000, zec: 3, sol: 5 };
+/** The admin also pays for keeper price updates, so the faucet never spends below this. */
+const FAUCET_RESERVE_SOL = Number(process.env.FAUCET_RESERVE_SOL ?? 1);
 
 /** Sends demo funds: test USDC, test zenZEC and (on localnet) SOL. */
 export async function faucet(wallet: PublicKey) {
   const { program: p, admin } = adminProgram();
   const conn = p.provider.connection;
+  if (DEPLOYMENT.cluster !== "localnet" && (await conn.getBalance(admin.publicKey)) < FAUCET_RESERVE_SOL * LAMPORTS_PER_SOL) {
+    throw new Error("The demo faucet is refilling. Use the SIMULATION tab, or try again later.");
+  }
   const usdcAta = ata(USDC_MINT, wallet);
   const zecAta = ata(ZEC_MINT, wallet);
   const t = tx(

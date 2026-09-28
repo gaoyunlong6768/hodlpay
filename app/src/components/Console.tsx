@@ -65,11 +65,9 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
   const m = useMemo(() => metrics(state, view?.debt ?? 0), [state, view?.debt]);
 
   useEffect(() => {
-    fetch("/api/risk/shock")
-      .then((r) => r.json())
-      .then((b) => setShock(Number(b.shock) || 0))
-      .catch(() => {});
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShock(chain.shock);
+  }, [chain.shock]);
 
   const connected = !!chain.owner;
   const guard = <A extends unknown[]>(fn: (...a: A) => unknown) => (...a: A) => {
@@ -154,7 +152,7 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
           status={m.status}
           busy={busy === "shock" || busy === "liquidate"}
           onLiquidate={guard(actions.liquidate)}
-          note="Moves the oracle price for every position on this demo deployment."
+          note="Moves the shared oracle price on this demo deployment; it snaps back to live prices after 3 minutes."
         />
       </div>
       <div className="lg:col-span-4">

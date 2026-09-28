@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { LAMPORTS_PER_SOL, PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import * as hp from "@/lib/hodlpay";
@@ -51,6 +51,9 @@ export interface OnchainView {
   gracePeriodDays: number;
 }
 
+/** A stress test moves the shared demo oracle, so it lapses on its own. */
+export const SHOCK_TTL_MS = 3 * 60_000;
+
 const load = <T,>(key: string, fallback: T): T => {
   try {
     const v = localStorage.getItem(key);
@@ -87,6 +90,11 @@ export function useOnchain() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastCheckout, setLastCheckout] = useState<CheckoutResult | null>(null);
+  const [stress, setStress] = useState<{ shock: number; until: number } | null>(null);
+  const stressRef = useRef(stress);
+  useEffect(() => {
+    stressRef.current = stress;
+  }, [stress]);
 
   const [genesis, setGenesis] = useState<string | null>(null);
   useEffect(() => {
@@ -169,15 +177,27 @@ export function useOnchain() {
     });
   }, [program, publicKey, connection, metaKey, eventsKey, scope]);
 
-  const keeper = useCallback(async (opts: { liquidate?: boolean; force?: boolean } = {}) => {
-    const res = await fetch("/api/keeper", { method: "POST", body: JSON.stringify(opts) });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error ?? "keeper failed");
-    return body as {
-      posted: { sig: string } | null;
-      liquidations: { owner: string; sig?: string; repaid?: number; asset?: AssetId; error?: string }[];
-    };
-  }, []);
+  const keeper = useCallback(
+    async (opts: { liquidate?: boolean; force?: boolean } = {}) => {
+      let s = stressRef.current;
+      if (s && Date.now() > s.until) {
+        s = null;
+        setStress(null);
+        opts = { ...opts, force: true };
+      }
+      const res = await fetch("/api/keeper", {
+        method: "POST",
+        body: JSON.stringify({ ...opts, force: opts.force || !!s, owner, shock: s?.shock ?? 0 }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "keeper failed");
+      return body as {
+        posted: { sig: string } | null;
+        liquidations: { owner: string; sig?: string; repaid?: number; asset?: AssetId; error?: string }[];
+      };
+    },
+    [owner],
+  );
 
   useEffect(() => {
     if (!owner) return;
@@ -323,6 +343,7 @@ export function useOnchain() {
         const res = await fetch("/api/risk/shock", { method: "POST", body: JSON.stringify({ shock }) });
         const body = await res.json();
         if (!res.ok) throw new Error(body.error);
+        setStress(shock === 0 ? null : { shock, until: Date.now() + SHOCK_TTL_MS });
         log("price", `Oracle stress test: prices ${shock >= 0 ? "+" : ""}${(shock * 100).toFixed(0)}% posted on-chain`, body.sig);
       }),
 
@@ -336,5 +357,5 @@ export function useOnchain() {
       }),
   };
 
-  return { owner, view, busy, error, setError, actions, refresh, lastCheckout };
+  return { owner, view, busy, error, setError, actions, refresh, lastCheckout, shock: stress?.shock ?? 0 };
 }

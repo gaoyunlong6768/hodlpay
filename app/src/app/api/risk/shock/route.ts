@@ -1,19 +1,16 @@
-import { getShock, postPrices, setShock } from "@/lib/server/admin";
+import { parseShock, postPrices } from "@/lib/server/admin";
 
-export async function GET() {
-  return Response.json({ shock: getShock() });
-}
-
-/** Demo stress test: shifts every oracle price by `shock` (e.g. -0.4 = -40%) and posts it on-chain. */
+/**
+ * Demo stress test: shifts every oracle price by `shock` (e.g. -0.4 = -40%) and posts it on-chain.
+ * The server keeps no shock state: the browser that set it re-sends it with its keeper passes
+ * until it expires, so an abandoned stress test heals itself on the next keeper pass.
+ */
 export async function POST(request: Request) {
   const { shock } = await request.json().catch(() => ({}));
-  const s = Number(shock);
-  if (!Number.isFinite(s) || s < -0.9 || s > 1) {
-    return Response.json({ error: "shock must be between -0.9 and 1" }, { status: 400 });
-  }
-  setShock(s);
+  const s = parseShock(shock);
+  if (s === null) return Response.json({ error: "shock must be between -0.9 and 1" }, { status: 400 });
   try {
-    return Response.json(await postPrices());
+    return Response.json(await postPrices(s));
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 500 });
   }

@@ -93,8 +93,9 @@ export const pdas = {
 export const ata = (mint: PublicKey, owner: PublicKey) =>
   getAssociatedTokenAddressSync(mint, owner, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 
+/** Server code can use a private RPC (`SOLANA_RPC`, never sent to the browser); browsers use the public one. */
 export function connection() {
-  return new Connection(DEPLOYMENT.rpc, "confirmed");
+  return new Connection(process.env.SOLANA_RPC || DEPLOYMENT.rpc, "confirmed");
 }
 
 export type SignerWallet = Pick<Wallet, "publicKey" | "signTransaction" | "signAllTransactions">;

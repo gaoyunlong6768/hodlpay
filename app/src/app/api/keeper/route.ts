@@ -1,24 +1,29 @@
-import { adminProgram, liquidatePosition, postPrices, scanPositions } from "@/lib/server/admin";
+import { adminProgram, liquidatePosition, parseShock, postPrices, scanPositions } from "@/lib/server/admin";
 import { fetchAssets } from "@/lib/hodlpay";
 
 const REFRESH_AFTER_S = 45;
 
 /**
  * One keeper pass, callable from the web app so a demo deployment works
- * without a separate keeper process: refreshes stale oracle prices and, when
- * `liquidate` is set, liquidates every position past its liquidation threshold.
+ * without a separate keeper process: refreshes stale oracle prices (at the
+ * caller's stress-test `shock`, if any) and, when `liquidate` is set,
+ * liquidates `owner`'s position if it is past its liquidation threshold.
+ * Other visitors' positions are left alone so one demo cannot liquidate another.
  */
 export async function POST(request: Request) {
-  const { force, liquidate } = await request.json().catch(() => ({}));
+  const { force, liquidate, owner, shock } = await request.json().catch(() => ({}));
+  const s = parseShock(shock);
+  if (s === null) return Response.json({ error: "shock must be between -0.9 and 1" }, { status: 400 });
   try {
     const { program } = adminProgram();
     const assets = await fetchAssets(program);
     const oldest = Math.min(...Object.values(assets).map((a) => a.updatedAt));
-    const posted = force || Date.now() / 1000 - oldest > REFRESH_AFTER_S ? await postPrices() : null;
+    const posted = force || Date.now() / 1000 - oldest > REFRESH_AFTER_S ? await postPrices(s) : null;
 
     const liquidations = [];
-    for (const h of liquidate ? await scanPositions(program) : []) {
-      if (h.status !== "liquidatable") continue;
+    const targets = liquidate && typeof owner === "string" ? await scanPositions(program) : [];
+    for (const h of targets) {
+      if (h.owner !== owner || h.status !== "liquidatable") continue;
       try {
         liquidations.push({ owner: h.owner, ...(await liquidatePosition(h)) });
       } catch (e) {
