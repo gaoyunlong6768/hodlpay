@@ -24,6 +24,9 @@ Click **Use demo wallet**, then **Get test funds**.
 Lock 4 SOL, switch to zenZEC and lock 2. Point at the credit line card.
 "SOL has a 50% max loan-to-value, zenZEC 40% because it's thinner. The credit limit is computed on-chain from both collateral slots."
 
+Point at the Zenrock line under the zenZEC amount.
+"If you hold ZEC, you send it from any Zcash wallet to Zenrock and zenZEC lands here in about five minutes. For the first time, ZEC holders can spend on credit without selling."
+
 Click the transaction link in the ledger to show it on the explorer.
 
 **0:45 – 1:15 · A merchant payment link**

@@ -95,6 +95,14 @@ Testnet deployment (Moderato, chain 42431): contract `0x0a5cdea68a5acd2d070ba9a2
 
 zenZEC is Zcash bridged to Solana by Zenrock: mainnet mint `JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` (SPL Token, 8 decimals). HodlPay lists it as its own collateral asset with a tighter risk tier than SOL (40% max LTV) because of thinner liquidity. There is no devnet zenZEC, so localnet and devnet use a test mint with the same decimals; on mainnet, bootstrap with `ZEC_MINT=JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` and the program uses the real token unchanged. ZEC prices come from the Pyth ZEC/USD feed.
 
+Why it matters for ZEC holders: ZEC is a long-term privacy asset with almost nowhere to spend it and no lending venue, so today the only way to use it is to sell it. With HodlPay a holder keeps the position and spends against it:
+
+1. Send ZEC from any Zcash wallet (shielded or transparent) to a personal deposit address from the [Zenrock mint page](https://app.zenrocklabs.io/services/zenzec/crucible/mint). zenZEC, 1:1 backed and held in decentralized MPC custody, arrives in the Solana wallet in about 5 minutes.
+2. Lock zenZEC in HodlPay. It gets its own risk tier and oracle feed, separate from SOL.
+3. Pay any merchant in 4. Repay and unlock, then redeem zenZEC back to ZEC on Zenrock.
+
+The console links to the Zenrock mint page whenever zenZEC is selected.
+
 ## Run it locally
 
 Requirements: Rust, Solana CLI 3.x, Anchor 1.x, Node 20+.

@@ -450,6 +450,20 @@ function Vault({
         ≈ {usd((Number.isFinite(x) ? x : 0) * state.prices[asset])} · adds{" "}
         {usd((Number.isFinite(x) ? x : 0) * state.prices[asset] * ASSETS[asset].maxLtv)} credit
       </p>
+      {asset === "zenZEC" && (
+        <p className="mt-2 text-[11px] leading-relaxed text-ink-soft">
+          Holding ZEC? Send it from any Zcash wallet to a deposit address from{" "}
+          <a
+            href="https://app.zenrocklabs.io/services/zenzec/crucible/mint"
+            target="_blank"
+            rel="noreferrer"
+            className="underline decoration-dotted hover:text-ink"
+          >
+            Zenrock
+          </a>{" "}
+          and zenZEC lands in this wallet in about 5 minutes, 1:1 backed. Your ZEC is never sold.
+        </p>
+      )}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           onClick={() => onDeposit(asset, x)}
