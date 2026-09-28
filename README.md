@@ -91,6 +91,8 @@ When a merchant wants settlement on Tempo, checkout pays the Tempo bridge accoun
 
 Testnet deployment (Moderato, chain 42431): contract `0x0a5cdea68a5acd2d070ba9a2e39299356408c402`, paying AlphaUSD.
 
+Trust model: the relayer is a single trusted key today. The contract refuses to settle the same Solana checkout twice, and the relayer software only pays the USDC that actually reached the bridge account, but the contract trusts the relayer key for the amount and the key can delay or refuse a settlement. The path to removing it is to have several independent relayers co-sign `settle`, then to verify the Solana checkout through a light-client or attestation bridge once one is available on Tempo. Merchants who need no trust assumption at all can settle in USDC on Solana.
+
 ### Zcash (zenZEC)
 
 zenZEC is Zcash bridged to Solana by Zenrock: mainnet mint `JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` (SPL Token, 8 decimals). HodlPay lists it as its own collateral asset with a tighter risk tier than SOL (40% max LTV) because of thinner liquidity. There is no devnet zenZEC, so localnet and devnet use a test mint with the same decimals; on mainnet, bootstrap with `ZEC_MINT=JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS` and the program uses the real token unchanged. ZEC prices come from the Pyth ZEC/USD feed.
