@@ -6,7 +6,7 @@ const REFRESH_AFTER_S = 45;
 
 export const maxDuration = 60;
 
-/** Scheduled keeper sweep (vercel.json): collects every overdue installment across all positions. */
+/** Scheduled keeper sweep (vercel.json daily, .github/workflows/keeper.yml hourly): collects every overdue installment across all positions. */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {

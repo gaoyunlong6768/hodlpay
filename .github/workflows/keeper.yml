@@ -1,0 +1,13 @@
+name: Keeper
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    name: Post prices and collect overdue installments
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 90 https://hodlpay.vercel.app/api/cron/keeper
