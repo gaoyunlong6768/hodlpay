@@ -177,6 +177,7 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
       <div className="lg:col-span-4">
         <Checkout
           available={m.available}
+          cash={view ? view.balances.USDC + view.creditBalance : undefined}
           loading={loading}
           busy={busy === "checkout"}
           onPay={guard(async (input: Parameters<typeof actions.checkout>[0]) => {
@@ -608,6 +609,7 @@ function CreditLine({ m, loading }: { m: ReturnType<typeof metrics>; loading?: b
 
 function Checkout({
   available,
+  cash,
   loading,
   busy,
   onPay,
@@ -615,6 +617,8 @@ function Checkout({
   receiptPending,
 }: {
   available: number;
+  /** USDC the shopper can put toward the first installment; unknown in simulation. */
+  cash?: number;
   loading?: boolean;
   busy?: boolean;
   onPay: (i: { merchant: string; item: string; price: number; rail: Rail }) => void;
@@ -626,6 +630,8 @@ function Checkout({
   const [rail, setRail] = useState<Rail>("solana");
   const c = CATALOG[pick];
   const fee = (c.price * PROTOCOL.merchantFeeBps) / 10_000;
+  const quarter = c.price / PROTOCOL.installments;
+  const paysFirst = cash === undefined || cash >= quarter;
 
   return (
     <Card title="Checkout" kicker="03 · merchant">
@@ -676,10 +682,17 @@ function Checkout({
             ? "Loading your credit line…"
             : c.price > available
             ? `Need ${usd(c.price - available)} more credit`
-            : `Pay 4 × ${usd(c.price / 4)} with HodlPay`}
+            : paysFirst
+              ? `Pay ${usd(quarter)} today with HodlPay`
+              : `Buy now, pay ${usd(quarter)} later`}
       </button>
       <p className="num mt-1.5 text-[11px] text-ink-soft">
-        Merchant gets {usd(c.price - fee)} now · fee {PROTOCOL.merchantFeeBps / 100}% · you pay 0% interest
+        {paysFirst
+          ? `Then 3 × ${usd(quarter)}, every ${PROTOCOL.installmentIntervalDays} days · 0% interest`
+          : `Not enough USDC for the first ${usd(quarter)} now: it is due today, 3 more every ${PROTOCOL.installmentIntervalDays} days · 0% interest`}
+      </p>
+      <p className="num mt-0.5 text-[11px] text-ink-soft">
+        Merchant gets {usd(c.price - fee)} now · fee {PROTOCOL.merchantFeeBps / 100}%
       </p>
       <Link
         href={payPath({
@@ -716,7 +729,10 @@ function Receipt({ loan, pending }: { loan: Loan; pending?: boolean }) {
           <span>
             #{i.index + 1} · {new Date(i.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </span>
-          <span>{usd(i.amount)}</span>
+          <span>
+            {usd(i.amount)}
+            {i.paidAt !== null && " · paid"}
+          </span>
         </div>
       ))}
     </div>

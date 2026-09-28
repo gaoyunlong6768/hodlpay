@@ -201,7 +201,7 @@ export function checkout(
       i === PROTOCOL.installments - 1
         ? Math.round((input.price - per * (PROTOCOL.installments - 1)) * 100) / 100
         : per,
-    paidAt: null,
+    paidAt: i === 0 ? s.now : null,
   }));
   const loan: Loan = {
     id: uid("loan"),
@@ -217,7 +217,7 @@ export function checkout(
   return log(
     { ...s, loans: [loan, ...s.loans] },
     "checkout",
-    `Paid ${input.merchant} ${usd(loan.merchantReceived)} in ${settled} for ${input.item}; 4 × ${usd(per)} scheduled`,
+    `Paid ${input.merchant} ${usd(loan.merchantReceived)} in ${settled} for ${input.item}; you paid ${usd(per)} today, 3 × ${usd(per)} to go`,
   );
 }
 

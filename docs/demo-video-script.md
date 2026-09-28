@@ -34,8 +34,8 @@ Click the transaction link in the ledger to show it on the explorer.
 Open `/merchant`, pick Kinfolk Studio, show the generated link, QR code and embed button. Click **Open checkout**.
 "Merchants integrate with a link or a button. This is the checkout their customer sees."
 
-On the checkout page, press **Buy now**.
-"The merchant gets paid right away: $1,240 minus the 3% fee, in USDC. I get four installments, zero interest."
+On the checkout page, press **Pay $310 today**.
+"The merchant gets paid right away: $1,240 minus the 3% fee, in USDC. I pay a quarter today in the same transaction, and the other three every two weeks, zero interest."
 
 Back on `/merchant`, press refresh: the sale appears with the amount received.
 
@@ -48,7 +48,7 @@ Click the Tempo transaction link and show the transfer on the Tempo explorer.
 
 **1:45 – 2:05 · Repay**
 
-Pay the first installment, then press **Pay off** on the other loan.
+Repay the next installment on one purchase, then press **Pay off** on the other.
 "Repayments go back into the pool, and each one releases its share of the merchant fee to LPs. Pay early at no cost; past a three-day grace period there's a 1% late fee."
 
 **2:05 – 2:40 · Risk**

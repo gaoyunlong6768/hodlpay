@@ -225,7 +225,7 @@ function LinkBuilder({ profile }: { profile: Profile }) {
           </div>
           {valid && (
             <div className="dash pt-2">
-              <Row k="Shopper pays" v={`4 × ${usd(x / 4)}`} />
+              <Row k="Shopper pays" v={`${usd(x / 4)} today, then 3 × ${usd(x / 4)}`} />
               <Row k="You receive now" v={usd(x * 0.97)} strong />
             </div>
           )}

@@ -42,6 +42,8 @@ export interface CheckoutResult extends CheckoutInput {
   sig: string;
   loan: string;
   merchantReceived: number;
+  /** The first installment was paid in the checkout transaction. */
+  firstPaid: boolean;
   tempoHash?: string;
 }
 
@@ -340,6 +342,12 @@ export function useOnchain() {
         if (!tempo && !solanaPayTo) throw new Error("Merchant has no Solana payout wallet");
         const payee = tempo ? new PublicKey(hp.DEPLOYMENT.tempoBridge!) : solanaPayTo;
         const ixs = await hp.buildCheckout(program!, publicKey!, payee, input.price, pos.loanCount);
+        const cash = await connection
+          .getTokenAccountBalance(hp.ata(hp.USDC_MINT, publicKey!))
+          .then((b) => Number(b.value.uiAmount ?? 0))
+          .catch(() => 0);
+        const firstPaid = cash + pos.creditBalance >= input.price / 4;
+        if (firstPaid) ixs.push(...(await hp.buildRepay(program!, publicKey!, pos.loanCount)));
         if (tempo) ixs.push(hp.buildTempoMemo(tempoPayTo));
         const sig = await send(ixs);
         const position = hp.pdas.position(publicKey!);
@@ -348,12 +356,15 @@ export function useOnchain() {
         meta[address] = { merchant: input.merchant, item: input.item, rail: input.rail, ...(tempo ? { tempoSig: sig } : {}) };
         save(metaKey, meta);
         const net = (await program!.account.loan.fetch(new PublicKey(address))).merchantReceived.toNumber() / 1e6;
-        const result: CheckoutResult = { ...input, sig, loan: address, merchantReceived: net };
+        const result: CheckoutResult = { ...input, sig, loan: address, merchantReceived: net, firstPaid };
+        const plan = firstPaid
+          ? `you paid ${usd(input.price / 4)} today, 3 × ${usd(input.price / 4)} to go`
+          : `4 × ${usd(input.price / 4)} scheduled, first due today`;
         log(
           "checkout",
           input.rail === "tempo"
-            ? `Financed ${input.item} on Solana: ${usd(net)} USDC to the Tempo bridge; 4 × ${usd(input.price / 4)} scheduled`
-            : `Paid ${input.merchant} ${usd(net)} in USDC on Solana for ${input.item}; 4 × ${usd(input.price / 4)} scheduled`,
+            ? `Financed ${input.item} on Solana: ${usd(net)} USDC to the Tempo bridge; ${plan}`
+            : `Paid ${input.merchant} ${usd(net)} in USDC on Solana for ${input.item}; ${plan}`,
           sig,
         );
         setLastCheckout(result);

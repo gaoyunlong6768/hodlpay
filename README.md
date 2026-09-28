@@ -35,7 +35,7 @@ Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchan
 
 1. **Lock**: deposit SOL or zenZEC into an on-chain vault. Each asset has its own risk tier.
 2. **Pay**: at checkout the protocol pays the merchant from the liquidity pool, minus a 3% merchant fee. The merchant chooses the rail: USDC on Solana, or a TIP-20 stablecoin on Tempo.
-3. **Repay**: 4 installments, 14 days apart, 0% interest for the user. Paying more than 3 days after a due date adds a 1% late fee on that installment.
+3. **Repay**: 4 installments, 14 days apart, 0% interest for the user. The first is paid in the checkout transaction itself (if the wallet holds too little USDC, it stays due that day). Paying more than 3 days after a due date adds a 1% late fee on that installment.
 4. **Protect**: the keeper posts oracle prices and emits a margin alert first; only past the liquidation line can a liquidator repay part of the debt (max 50% per call) and take collateral at a 5% bonus. Repaid amounts are credited to the user's upcoming installments.
 
 | Asset  | Max LTV | Margin alert | Liquidation |

@@ -77,7 +77,7 @@ function Pay({ r }: { r: PayRequest }) {
 
   if (lastCheckout && lastCheckout.item === r.item && lastCheckout.price === r.amount) {
     const loan = view?.state.loans.find((l) => l.id === lastCheckout.loan);
-    const firstPaid = loan ? loan.installments[0].paidAt !== null : false;
+    const firstPaid = lastCheckout.firstPaid || (loan ? loan.installments[0].paidAt !== null : false);
     return (
       <Paid
         r={r}
@@ -104,6 +104,7 @@ function Pay({ r }: { r: PayRequest }) {
   const asset = picked ?? ids.find((id) => plan(id).need <= plan(id).has) ?? "SOL";
   const { price, need, has: walletHas } = plan(asset);
   const quarter = r.amount / PROTOCOL.installments;
+  const paysFirst = !view || view.balances.USDC + view.creditBalance >= quarter;
   const step = !chain.owner ? 1 : shortfall > 0 ? 2 : 3;
 
   return (
@@ -188,9 +189,14 @@ function Pay({ r }: { r: PayRequest }) {
             ? r.rail === "tempo"
               ? "Paying on Solana, settling on Tempo…"
               : "Paying merchant…"
-            : `Buy now · 4 × ${usd(quarter)}`}
+            : paysFirst
+              ? `Pay ${usd(quarter)} today · 3 × ${usd(quarter)} later`
+              : `Buy now · first ${usd(quarter)} due today`}
         </button>
         <p className="num mt-1.5 text-[11px] text-ink-soft">
+          {paysFirst
+            ? `${r.merchant} is paid in full now; you pay the first installment in the same transaction. `
+            : `Your wallet has less than ${usd(quarter)} USDC, so the first installment stays due today. `}
           0% interest. Paying more than 3 days late on an installment adds a 1% fee. You can pay off early any time.
         </p>
       </Step>

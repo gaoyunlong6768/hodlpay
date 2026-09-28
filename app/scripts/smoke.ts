@@ -75,8 +75,15 @@ async function main() {
     const bridge = new PublicKey(hp.DEPLOYMENT.tempoBridge!);
     const tempoSig = await send(
       p,
-      hp.tx(...(await hp.buildCheckout(p, user.publicKey, bridge, 50, 1)), hp.buildTempoMemo(hp.TEMPO.merchants.Bluebottle)),
+      hp.tx(
+        ...(await hp.buildCheckout(p, user.publicKey, bridge, 50, 1)),
+        ...(await hp.buildRepay(p, user.publicKey, 1)),
+        hp.buildTempoMemo(hp.TEMPO.merchants.Bluebottle),
+      ),
     );
+    const tempoLoan = await p.account.loan.fetch(hp.pdas.loan(hp.pdas.position(user.publicKey), 1));
+    if (tempoLoan.installmentsPaid !== 1) throw new Error("First installment was not paid at checkout");
+    console.log(`✓ tempo checkout paid the first installment in the same transaction`);
     const s = await settleOnTempo(tempoSig);
     console.log(`✓ tempo rail: ${s.amount} ${s.token} paid to ${s.merchant} on Tempo (${s.hash.slice(0, 18)}…)`);
     const replay = await settleOnTempo(tempoSig);
