@@ -13,7 +13,7 @@ jobs:
       run:
         working-directory: protocol
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Solana CLI (Agave 3.1.10)
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/v3.1.10/install)"
@@ -32,19 +32,19 @@ jobs:
         run: cargo test
 
   app:
-    name: Web app (lint, types, build)
+    name: Web app (lint + type-checked build)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - run: npx tsc --noEmit
-      - run: npm run build
+      - name: Build (includes type check)
+        run: npm run build
