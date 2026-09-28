@@ -745,6 +745,66 @@ export type Hodlpay = {
       "args": []
     },
     {
+      "name": "refreshPrice",
+      "discriminator": [
+        253,
+        61,
+        142,
+        248,
+        9,
+        32,
+        158,
+        32
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset.mint",
+                "account": "collateralAsset"
+              }
+            ]
+          }
+        },
+        {
+          "name": "priceUpdate"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "repay",
       "discriminator": [
         234,
@@ -1339,6 +1399,21 @@ export type Hodlpay = {
       "code": 6015,
       "name": "insufficientLiquidity",
       "msg": "Not enough idle liquidity: funds are lent out"
+    },
+    {
+      "code": 6016,
+      "name": "invalidPriceUpdate",
+      "msg": "Invalid Pyth price update account"
+    },
+    {
+      "code": 6017,
+      "name": "feedMismatch",
+      "msg": "Price update is for a different feed"
+    },
+    {
+      "code": 6018,
+      "name": "priceUncertain",
+      "msg": "Oracle confidence interval too wide"
     }
   ],
   "types": [
@@ -1362,6 +1437,15 @@ export type Hodlpay = {
           {
             "name": "priceE6",
             "type": "u64"
+          },
+          {
+            "name": "pythFeedId",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
@@ -1437,6 +1521,18 @@ export type Hodlpay = {
           {
             "name": "totalDeposited",
             "type": "u64"
+          },
+          {
+            "name": "pythFeedId",
+            "docs": [
+              "Pyth feed id; all zeros means keeper-posted prices only."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
             "name": "bump",
@@ -1526,6 +1622,14 @@ export type Hodlpay = {
             "name": "feesEarned",
             "docs": [
               "Lifetime merchant fees + late fees accrued to liquidity providers."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "unearnedFees",
+            "docs": [
+              "Merchant fees on open loans, earned installment by installment. Excluded",
+              "from pool value so LPs cannot capture a fee by depositing around a checkout."
             ],
             "type": "u64"
           },
@@ -1679,6 +1783,14 @@ export type Hodlpay = {
           },
           {
             "name": "lateFeesPaid",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "feeEarned",
             "type": "u64"
           },
           {

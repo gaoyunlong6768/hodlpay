@@ -60,13 +60,16 @@ async function main() {
   console.log(`relayer AlphaUSD ${formatUnits(await bal(ALPHA_USD, account.address), 6)}, pathUSD ${formatUnits(await bal(PATH_USD, account.address), 6)}`);
 
   const { abi, bytecode } = compile();
-  let settlement: Hex | undefined = existsSync(outFile) ? JSON.parse(readFileSync(outFile, "utf8")).settlement : undefined;
+  const existing = existsSync(outFile) ? JSON.parse(readFileSync(outFile, "utf8")) : {};
+  let settlement: Hex | undefined = existing.settlement;
+  let deployBlock: number | undefined = existing.deployBlock;
   if (settlement && (await pub.getCode({ address: settlement }))?.length) {
     console.log(`settlement already deployed at ${settlement}`);
   } else {
     const hash = await wallet.deployContract({ abi, bytecode, args: [account.address] });
     const receipt = await pub.waitForTransactionReceipt({ hash });
     settlement = receipt.contractAddress!;
+    deployBlock = Number(receipt.blockNumber);
     console.log(`deployed HodlPaySettlement at ${settlement} (tx ${hash})`);
   }
 
@@ -82,7 +85,6 @@ async function main() {
     console.log(`funded settlement with ${LIQUIDITY} AlphaUSD`);
   }
 
-  const existing = existsSync(outFile) ? JSON.parse(readFileSync(outFile, "utf8")) : {};
   const merchants =
     existing.merchants ??
     Object.fromEntries(
@@ -96,6 +98,7 @@ async function main() {
         rpc: tempoModerato.rpcUrls.default.http[0],
         explorer: tempoModerato.blockExplorers.default.url,
         settlement,
+        deployBlock,
         token: ALPHA_USD,
         tokenSymbol: "AlphaUSD",
         relayer: account.address,

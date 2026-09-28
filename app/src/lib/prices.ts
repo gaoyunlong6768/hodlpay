@@ -1,7 +1,4 @@
-const PYTH_FEEDS = {
-  SOL: "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
-  zenZEC: "be9b59d178f0d6a97ab4c343bff2aa69caa1eaae3e9048a65788c529b125bb24",
-} as const;
+import { PYTH_FEEDS } from "@/lib/hodlpay";
 
 export type Prices = { SOL: number; zenZEC: number };
 export type PriceQuote = { source: string; prices: Prices; at: number };

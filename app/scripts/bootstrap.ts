@@ -114,6 +114,7 @@ async function main() {
         marginLtvBps: margin,
         liquidationLtvBps: liq,
         priceE6: hp.toUnits(price, 6),
+        pythFeedId: Array.from(Buffer.from(hp.PYTH_FEEDS[label as keyof typeof hp.PYTH_FEEDS], "hex")),
       })
       .accountsPartial({
         admin: admin.publicKey,

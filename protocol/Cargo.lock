@@ -1482,6 +1482,7 @@ dependencies = [
  "anchor-spl",
  "litesvm",
  "litesvm-token",
+ "solana-account",
  "solana-keypair",
  "solana-message",
  "solana-signer",

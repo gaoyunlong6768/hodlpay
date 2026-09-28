@@ -32,6 +32,10 @@ pub mod hodlpay {
         admin::handle_update_price(ctx, price_e6)
     }
 
+    pub fn refresh_price(ctx: Context<RefreshPrice>) -> Result<()> {
+        oracle::handle_refresh_price(ctx)
+    }
+
     pub fn deposit_liquidity(ctx: Context<ProvideLiquidity>, amount: u64) -> Result<()> {
         pool::handle_deposit_liquidity(ctx, amount)
     }

@@ -79,6 +79,7 @@ pub fn handle_initialize(ctx: Context<Initialize>, args: InitializeArgs) -> Resu
     config.installment_interval = args.installment_interval;
     config.max_price_age = args.max_price_age;
     config.total_debt = 0;
+    config.unearned_fees = 0;
     config.bump = ctx.bumps.config;
     config.vault_bump = ctx.bumps.liquidity_vault;
     Ok(())
@@ -102,6 +103,7 @@ pub struct AddAssetArgs {
     pub margin_ltv_bps: u16,
     pub liquidation_ltv_bps: u16,
     pub price_e6: u64,
+    pub pyth_feed_id: [u8; 32],
 }
 
 #[derive(Accounts)]
@@ -152,6 +154,7 @@ pub fn handle_add_asset(ctx: Context<AddAsset>, args: AddAssetArgs) -> Result<()
     asset.margin_ltv_bps = args.margin_ltv_bps;
     asset.liquidation_ltv_bps = args.liquidation_ltv_bps;
     asset.total_deposited = 0;
+    asset.pyth_feed_id = args.pyth_feed_id;
     asset.bump = ctx.bumps.asset;
     asset.vault_bump = ctx.bumps.vault;
     Ok(())

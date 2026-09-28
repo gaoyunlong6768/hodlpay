@@ -25,3 +25,11 @@ pub const LP_MINT_SEED: &[u8] = b"lp_mint";
 pub const MAX_ASSETS: usize = 4;
 
 pub const BPS: u64 = 10_000;
+
+/// Pyth Solana receiver; owns `PriceUpdateV2` accounts, including sponsored feeds.
+pub const PYTH_RECEIVER_ID: Pubkey = pubkey!("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
+
+pub const PRICE_UPDATE_V2_DISCRIMINATOR: [u8; 8] = [34, 241, 35, 99, 157, 126, 244, 205];
+
+/// Pyth updates with a confidence interval wider than this share of price are rejected.
+pub const MAX_CONF_BPS: u64 = 200;

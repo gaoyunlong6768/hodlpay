@@ -26,7 +26,16 @@ Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 | Merchant  | 3% fee                        | Full amount upfront in stablecoins, no price risk |
 | LP        | USDC into the pool            | Merchant fees + late fees, via LP share price     |
 
-The pool is value-accruing: `pool value = idle USDC in vault + outstanding debt`. LP shares are an SPL mint owned by the program; depositing mints shares at the current share price, withdrawing burns them and is limited to idle liquidity.
+The pool is value-accruing: `pool value = idle USDC in vault + outstanding debt − unearned merchant fees`. The merchant fee on a loan is earned installment by installment, so an LP cannot capture a fee by depositing right before a checkout and withdrawing right after. LP shares are an SPL mint owned by the program; depositing mints shares at the current share price, withdrawing burns them and is limited to idle liquidity.
+
+### Merchant side
+
+- **Payment links** (`/pay?merchant=…&item=…&amount=…&rail=solana|tempo&to=…`): a hosted checkout any merchant can send or embed. The shopper connects a wallet, locks just enough SOL or zenZEC if their credit is short, and pays in 4. The merchant is paid in the same transaction.
+- **Merchant portal** (`/merchant`): set payout addresses, generate a payment link, QR code and embeddable "Pay in 4 with HodlPay" button, and see every sale: Solana loans read from the program (filtered by merchant), Tempo payouts read from the settlement contract's `Settled` events.
+
+### Oracle
+
+Every asset stores its Pyth feed id. `refresh_price` is permissionless: anyone can pass a Pyth `PriceUpdateV2` account (for example the sponsored feed accounts Pyth keeps fresh on devnet and mainnet), and the program checks the owner (Pyth receiver), full Wormhole verification, the feed id, the confidence interval (≤ 2% of price) and the age before accepting it. Older updates never overwrite newer prices. The keeper uses this path when a fresh sponsored feed exists and falls back to posting prices itself (`update_price`) otherwise, e.g. on localnet or during the demo stress test.
 
 ## Architecture
 
@@ -50,7 +59,7 @@ The pool is value-accruing: `pool value = idle USDC in vault + outstanding debt`
                     │  replay-protected per Solana sig   │
                     └────────────────────────────────────┘
 
- Keeper (app/scripts/keeper.ts or /api/keeper): Pyth → update_price, scan positions,
+ Keeper (app/scripts/keeper.ts or /api/keeper): Pyth → refresh_price (or update_price), scan positions,
  margin alerts (Telegram), liquidate unhealthy positions.
 ```
 
@@ -68,6 +77,7 @@ docs/       Go-to-market notes, pitch and demo video scripts
 | Group     | Instructions                                                   |
 | --------- | -------------------------------------------------------------- |
 | Admin     | `initialize`, `add_asset`, `update_price`, `set_keeper`        |
+| Oracle    | `refresh_price` (permissionless, Pyth)                         |
 | Liquidity | `deposit_liquidity`, `withdraw_liquidity`                      |
 | Position  | `open_position`, `deposit`, `withdraw`                         |
 | Credit    | `checkout`, `repay`                                            |
@@ -114,7 +124,14 @@ npm run dev
 
 Open the console, press **Use demo wallet**, then **Get test funds**, then lock collateral, check out, repay, and use the risk desk to trigger a liquidation.
 
-`npm run smoke` runs the full flow headlessly against the configured cluster: LP deposit, faucet, deposits, checkout, repay, Tempo settlement with replay check, price shock, liquidation and LP withdrawal. `npm run keeper` runs the standalone keeper loop (`-- --once` for a single pass).
+Merchants: open `/merchant`, pick a demo merchant, generate a payment link and open it to pay as a shopper; the sale then shows up in the portal.
+
+`npm run smoke` runs the full flow headlessly against the configured cluster: permissionless Pyth refresh, LP deposit, faucet, deposits, checkout, repay, Tempo settlement with replay check, price shock, liquidation and LP withdrawal. To exercise `refresh_price` on localnet with real Pyth data, dump the sponsored feed accounts from mainnet and load them into the validator:
+
+```bash
+solana account -um 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE --output json -o sol-feed.json
+solana-test-validator ... --account 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE sol-feed.json
+``` `npm run keeper` runs the standalone keeper loop (`-- --once` for a single pass).
 
 ### Devnet
 
@@ -138,8 +155,7 @@ cd ../app && HODLPAY_CLUSTER=devnet npm run bootstrap
 
 ## Roadmap
 
-- Mainnet with real USDC and zenZEC, Pyth pull oracle posted in the same transaction as checkout
-- Merchant SDK and Solana Pay checkout links
-- Fee accrual over the loan term instead of at origination (removes LP timing games)
+- Mainnet with real USDC and zenZEC; drop keeper-posted prices once every asset has a sponsored Pyth feed
+- Merchant SDK (React button, webhooks on sale) and Solana Pay transaction requests
 - Longer terms with interest for larger purchases
 - Tempo-native repayments and a direct Tempo liquidity pool

@@ -34,4 +34,10 @@ pub enum ErrorCode {
     ExceedsCloseFactor,
     #[msg("Not enough idle liquidity: funds are lent out")]
     InsufficientLiquidity,
+    #[msg("Invalid Pyth price update account")]
+    InvalidPriceUpdate,
+    #[msg("Price update is for a different feed")]
+    FeedMismatch,
+    #[msg("Oracle confidence interval too wide")]
+    PriceUncertain,
 }

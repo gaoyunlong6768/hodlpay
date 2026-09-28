@@ -23,6 +23,7 @@ use {
 const USDC: u64 = 1_000_000;
 const SOL: u64 = 1_000_000_000;
 const DAY: i64 = 86_400;
+const SOL_FEED: [u8; 32] = [7u8; 32];
 
 struct Env {
     svm: LiteSVM,
@@ -104,9 +105,9 @@ fn setup() -> Env {
     )
     .unwrap();
 
-    for (mint, max, margin, liq, price) in [
-        (sol, 5_000, 6_500, 7_500, 120 * USDC),
-        (zec, 4_000, 5_500, 6_500, 1_500 * USDC),
+    for (mint, max, margin, liq, price, feed) in [
+        (sol, 5_000, 6_500, 7_500, 120 * USDC, SOL_FEED),
+        (zec, 4_000, 5_500, 6_500, 1_500 * USDC, [0u8; 32]),
     ] {
         send(
             &mut svm,
@@ -117,6 +118,7 @@ fn setup() -> Env {
                         margin_ltv_bps: margin,
                         liquidation_ltv_bps: liq,
                         price_e6: price,
+                        pyth_feed_id: feed,
                     },
                 },
                 hodlpay::accounts::AddAsset {
@@ -427,25 +429,33 @@ fn lp_shares_earn_merchant_and_late_fees() {
     let (sol, sol_ata) = (env.sol, alice.sol_ata);
     move_collateral(&mut env, &alice, sol, sol_ata, 2_000 * SOL, false).unwrap();
 
-    // $80k purchase: the pool pays the merchant $77.6k, the $2.4k fee accrues to LPs.
+    // $80k purchase: the pool pays the merchant $77.6k. The $2.4k fee is unearned until repaid.
     let loan = checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 80_000 * USDC).unwrap();
     assert_eq!(balance(&env.svm, &vault), 22_400 * USDC);
+    let c: hodlpay::state::Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    assert_eq!(c.unearned_fees, 2_400 * USDC);
+    assert_eq!(c.fees_earned, 0);
 
-    // Lent-out funds cannot be withdrawn: 100k shares are worth $102.4k, only $22.4k is idle.
+    // Lent-out funds cannot be withdrawn: 100k shares are worth $100k, only $22.4k is idle.
     let (admin, admin_usdc, admin_lp) = (env.admin.insecure_clone(), env.admin_usdc, env.admin_lp);
     assert!(liquidity(&mut env, &admin, admin_usdc, admin_lp, 100_000 * USDC, false).is_err());
 
-    // A second LP joins at the higher share price: $10,240 buys 10,000 shares.
+    // A second LP joining right after the checkout gets no share of its fee: $10k buys 10k shares.
     let bob = Keypair::new();
     env.svm.airdrop(&bob.pubkey(), SOL).unwrap();
     let bob_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &bob, &env.usdc).send().unwrap();
     let bob_lp = CreateAssociatedTokenAccount::new(&mut env.svm, &bob, &pda(&[LP_MINT_SEED])).send().unwrap();
-    MintTo::new(&mut env.svm, &env.admin, &env.usdc, &bob_usdc, 10_240 * USDC).send().unwrap();
-    liquidity(&mut env, &bob, bob_usdc, bob_lp, 10_240 * USDC, true).unwrap();
+    MintTo::new(&mut env.svm, &env.admin, &env.usdc, &bob_usdc, 10_000 * USDC).send().unwrap();
+    liquidity(&mut env, &bob, bob_usdc, bob_lp, 10_000 * USDC, true).unwrap();
     assert_eq!(balance(&env.svm, &bob_lp), 10_000 * USDC);
 
-    // Installment 1 on time; installment 2 paid 17 days in (due day 14 + 3 day grace): 1% late fee.
+    // Installment 1 on time releases a quarter of the fee.
     repay(&mut env, &alice, loan).unwrap();
+    let c: hodlpay::state::Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    assert_eq!(c.fees_earned, 600 * USDC);
+    assert_eq!(c.unearned_fees, 1_800 * USDC);
+
+    // Installment 2 paid 17 days in (due day 14 + 3 day grace): 1% late fee.
     let mut clock: anchor_lang::prelude::Clock = env.svm.get_sysvar();
     clock.unix_timestamp += 17 * DAY + 1;
     env.svm.set_sysvar(&clock);
@@ -460,17 +470,102 @@ fn lp_shares_earn_merchant_and_late_fees() {
     assert_eq!(balance(&env.svm, &alice.usdc_ata), 19_800 * USDC);
     let c: hodlpay::state::Config = read(&env.svm, &pda(&[CONFIG_SEED]));
     assert_eq!(c.fees_earned, 2_600 * USDC);
+    assert_eq!(c.unearned_fees, 0);
     assert_eq!(c.total_debt, 0);
+    let l: Loan = read(&env.svm, &loan);
+    assert_eq!(l.fee_earned, 2_400 * USDC);
 
     // Both LPs exit with their share of the $2.6k in fees.
     let pool = balance(&env.svm, &vault);
-    assert_eq!(pool, 112_840 * USDC);
+    assert_eq!(pool, 112_600 * USDC);
     let before = balance(&env.svm, &admin_usdc);
     liquidity(&mut env, &admin, admin_usdc, admin_lp, 100_000 * USDC, false).unwrap();
     let admin_out = balance(&env.svm, &admin_usdc) - before;
     assert_eq!(admin_out, ((100_000 * USDC) as u128 * pool as u128 / (110_000 * USDC) as u128) as u64);
-    assert!(admin_out > 102_500 * USDC);
+    assert!(admin_out > 102_300 * USDC);
     liquidity(&mut env, &bob, bob_usdc, bob_lp, 10_000 * USDC, false).unwrap();
-    assert!(balance(&env.svm, &bob_usdc) > 10_240 * USDC);
+    assert!(balance(&env.svm, &bob_usdc) > 10_200 * USDC);
     assert_eq!(balance(&env.svm, &vault), 0);
+}
+
+fn price_update(feed: [u8; 32], price: i64, conf: u64, exponent: i32, publish_time: i64, full: bool) -> Vec<u8> {
+    let mut d = PRICE_UPDATE_V2_DISCRIMINATOR.to_vec();
+    d.extend([0u8; 32]);
+    if full {
+        d.push(1);
+    } else {
+        d.extend([0, 5]);
+    }
+    d.extend(feed);
+    d.extend(price.to_le_bytes());
+    d.extend(conf.to_le_bytes());
+    d.extend(exponent.to_le_bytes());
+    d.extend(publish_time.to_le_bytes());
+    d.extend(publish_time.to_le_bytes());
+    d.extend(price.to_le_bytes());
+    d.extend(conf.to_le_bytes());
+    d.extend(0u64.to_le_bytes());
+    d
+}
+
+fn post_update(env: &mut Env, data: Vec<u8>, owner: Pubkey) -> Pubkey {
+    let key = Keypair::new().pubkey();
+    let account = solana_account::Account { lamports: 10_000_000, data, owner, executable: false, rent_epoch: 0 };
+    env.svm.set_account(key, account).unwrap();
+    key
+}
+
+fn refresh(env: &mut Env, mint: Pubkey, price_update: Pubkey) -> Result<(), String> {
+    let payer = Keypair::new();
+    env.svm.airdrop(&payer.pubkey(), SOL).unwrap();
+    let i = ix(
+        hodlpay::instruction::RefreshPrice {},
+        hodlpay::accounts::RefreshPrice {
+            config: pda(&[CONFIG_SEED]),
+            asset: pda(&[ASSET_SEED, mint.as_ref()]),
+            price_update,
+        },
+        &[],
+    );
+    send(&mut env.svm, i, &[&payer])
+}
+
+#[test]
+fn anyone_can_refresh_price_from_pyth() {
+    let mut env = setup();
+    let (sol, zec) = (env.sol, env.zec);
+    let asset = pda(&[ASSET_SEED, sol.as_ref()]);
+    let mut clock: anchor_lang::prelude::Clock = env.svm.get_sysvar();
+    clock.unix_timestamp += 100;
+    env.svm.set_sysvar(&clock);
+    let now = clock.unix_timestamp;
+
+    // $150.12345678 with exponent -8, published 10s ago.
+    let good = price_update(SOL_FEED, 15_012_345_678, 10_000_000, -8, now - 10, true);
+    let wrong_owner = post_update(&mut env, good.clone(), Keypair::new().pubkey());
+    assert!(refresh(&mut env, sol, wrong_owner).is_err());
+    let partial = post_update(&mut env, price_update(SOL_FEED, 15_012_345_678, 10_000_000, -8, now - 10, false), PYTH_RECEIVER_ID);
+    assert!(refresh(&mut env, sol, partial).is_err());
+    let other_feed = post_update(&mut env, price_update([9u8; 32], 15_012_345_678, 10_000_000, -8, now - 10, true), PYTH_RECEIVER_ID);
+    assert!(refresh(&mut env, sol, other_feed).is_err());
+    let stale = post_update(&mut env, price_update(SOL_FEED, 15_012_345_678, 10_000_000, -8, now - 301, true), PYTH_RECEIVER_ID);
+    assert!(refresh(&mut env, sol, stale).is_err());
+    let uncertain = post_update(&mut env, price_update(SOL_FEED, 15_012_345_678, 400_000_000, -8, now - 10, true), PYTH_RECEIVER_ID);
+    assert!(refresh(&mut env, sol, uncertain).is_err());
+
+    let ok = post_update(&mut env, good, PYTH_RECEIVER_ID);
+    refresh(&mut env, sol, ok).unwrap();
+    let a: hodlpay::state::CollateralAsset = read(&env.svm, &asset);
+    assert_eq!(a.price_e6, 150_123_456);
+    assert_eq!(a.price_updated_at, now - 10);
+
+    // An older update never overwrites a newer price.
+    let older = post_update(&mut env, price_update(SOL_FEED, 9_000_000_000, 1_000_000, -8, now - 20, true), PYTH_RECEIVER_ID);
+    refresh(&mut env, sol, older).unwrap();
+    let a: hodlpay::state::CollateralAsset = read(&env.svm, &asset);
+    assert_eq!(a.price_e6, 150_123_456);
+
+    // Assets without a configured feed only accept keeper prices.
+    let zec_update = post_update(&mut env, price_update([0u8; 32], 30_000_000_000, 1_000_000, -8, now - 10, true), PYTH_RECEIVER_ID);
+    assert!(refresh(&mut env, zec, zec_update).is_err());
 }

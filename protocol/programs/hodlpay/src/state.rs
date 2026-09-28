@@ -25,13 +25,18 @@ pub struct Config {
     pub grace_period: i64,
     /// Lifetime merchant fees + late fees accrued to liquidity providers.
     pub fees_earned: u64,
+    /// Merchant fees on open loans, earned installment by installment. Excluded
+    /// from pool value so LPs cannot capture a fee by depositing around a checkout.
+    pub unearned_fees: u64,
     pub bump: u8,
     pub vault_bump: u8,
 }
 
 impl Config {
     pub fn pool_value(&self, idle: u64) -> Result<u64> {
-        idle.checked_add(self.total_debt).ok_or(error!(ErrorCode::Overflow))
+        idle.checked_add(self.total_debt)
+            .and_then(|v| v.checked_sub(self.unearned_fees))
+            .ok_or(error!(ErrorCode::Overflow))
     }
 }
 
@@ -48,6 +53,8 @@ pub struct CollateralAsset {
     pub margin_ltv_bps: u16,
     pub liquidation_ltv_bps: u16,
     pub total_deposited: u64,
+    /// Pyth feed id; all zeros means keeper-posted prices only.
+    pub pyth_feed_id: [u8; 32],
     pub bump: u8,
     pub vault_bump: u8,
 }
@@ -96,12 +103,23 @@ pub struct Loan {
     pub installments_paid: u8,
     pub repaid: u64,
     pub late_fees_paid: u64,
+    pub fee: u64,
+    pub fee_earned: u64,
     pub created_at: i64,
     pub next_due_at: i64,
     pub bump: u8,
 }
 
 impl Loan {
+    /// Share of the merchant fee earned by paying `due`; the last installment earns the rest.
+    pub fn fee_for(&self, due: u64) -> u64 {
+        if self.installments_paid + 1 == self.installments_total {
+            self.fee - self.fee_earned
+        } else {
+            ((self.fee as u128) * due as u128 / self.principal as u128) as u64
+        }
+    }
+
     pub fn next_installment(&self) -> Result<u64> {
         require!(self.installments_paid < self.installments_total, ErrorCode::LoanRepaid);
         if self.installments_paid + 1 == self.installments_total {

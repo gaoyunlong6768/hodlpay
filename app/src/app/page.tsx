@@ -1,4 +1,5 @@
 import Console from "@/components/Console";
+import SiteHeader from "@/components/SiteHeader";
 
 const STEPS = [
   ["Lock", "Deposit SOL or zenZEC into an on-chain vault. You keep the upside."],
@@ -9,20 +10,7 @@ const STEPS = [
 export default function Home() {
   return (
     <main className="flex-1">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5">
-        <a href="#" className="font-display text-2xl tracking-tight">
-          Hodl<span className="italic">Pay</span>
-        </a>
-        <nav className="num flex items-center gap-5 text-xs uppercase tracking-widest text-ink-soft">
-          <a href="#how" className="hidden hover:text-ink sm:inline">
-            How it works
-          </a>
-          <a href="#console" className="hidden hover:text-ink sm:inline">
-            Console
-          </a>
-          <span className="border border-ink px-2.5 py-1 text-ink">Devnet</span>
-        </nav>
-      </header>
+      <SiteHeader />
 
       <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-5 pb-16 pt-10 md:grid-cols-12 md:pt-16">
         <div className="md:col-span-7">
@@ -108,7 +96,7 @@ export default function Home() {
       <footer className="mx-auto w-full max-w-6xl px-5 pb-10">
         <div className="dash pt-4 num flex justify-between text-[11px] text-ink-soft">
           <span>HodlPay · Colosseum Crypto World&apos;s Fair 2026</span>
-          <span>Devnet demo. Not financial advice.</span>
+          <span>Test network demo. Not financial advice.</span>
         </div>
       </footer>
     </main>

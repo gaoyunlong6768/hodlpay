@@ -32,6 +32,20 @@ async function main() {
   console.log(`user ${user.publicKey.toBase58()}`);
   console.log(`✓ faucet ${(await faucet(user.publicKey)).slice(0, 16)}…`);
 
+  const feed = hp.pythFeedAccount(hp.PYTH_FEEDS.SOL);
+  const feedInfo = await conn.getAccountInfo(feed);
+  if (feedInfo?.owner.equals(hp.PYTH_RECEIVER_ID)) {
+    const u = hp.readPythUpdate(feedInfo.data);
+    const age = Math.round(Date.now() / 1000 - u.publishTime);
+    if (age < (await hp.fetchConfig(p)).maxPriceAge) {
+      await step("permissionless Pyth refresh by a regular user (SOL)", Promise.all([hp.buildRefreshPrice(p, "SOL", feed)]));
+      const a = await hp.fetchAssets(p);
+      console.log(`  Pyth update $${(u.price * 10 ** u.exponent).toFixed(4)} (${age}s old), on-chain SOL price $${a.SOL.price}`);
+    } else {
+      console.log(`  skipped Pyth refresh: sponsored update is ${age}s old`);
+    }
+  }
+
   const pool0 = await hp.fetchPool(p);
   await step("LP deposit 1000 USDC", hp.buildLpDeposit(p, user.publicKey, 1000));
   const lpShares = Number((await conn.getTokenAccountBalance(hp.ata(hp.pdas.lpMint(), user.publicKey))).value.uiAmount);

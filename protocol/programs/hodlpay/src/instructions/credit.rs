@@ -95,6 +95,8 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
     loan.installments_paid = 0;
     loan.repaid = 0;
     loan.late_fees_paid = 0;
+    loan.fee = fee;
+    loan.fee_earned = 0;
     loan.created_at = now;
     loan.next_due_at = now;
     loan.bump = ctx.bumps.loan;
@@ -103,7 +105,7 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
     p.debt = new_debt;
     p.loan_count += 1;
     ctx.accounts.config.total_debt += amount;
-    ctx.accounts.config.fees_earned += fee;
+    ctx.accounts.config.unearned_fees += fee;
 
     emit!(CheckoutEvent {
         owner: p.owner,
@@ -143,6 +145,7 @@ pub struct Repay<'info> {
 
 /// Pays the next installment. Any credit left by a liquidation is applied first.
 /// Past the grace period a late fee is added, paid in cash to liquidity providers.
+/// Each installment also releases its share of the merchant fee to LPs.
 pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     let due = ctx.accounts.loan.next_installment()?;
     let now = Clock::get()?.unix_timestamp;
@@ -168,14 +171,17 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
 
     p.credit_balance -= from_credit;
     p.debt = p.debt.saturating_sub(cash);
+    let loan = &mut ctx.accounts.loan;
+    let fee_earned = loan.fee_for(due);
     let config = &mut ctx.accounts.config;
     config.total_debt = config.total_debt.saturating_sub(cash);
-    config.fees_earned += late_fee;
+    config.unearned_fees = config.unearned_fees.saturating_sub(fee_earned);
+    config.fees_earned += fee_earned + late_fee;
 
-    let loan = &mut ctx.accounts.loan;
     loan.installments_paid += 1;
     loan.repaid += due;
     loan.late_fees_paid += late_fee;
+    loan.fee_earned += fee_earned;
     loan.next_due_at += config.installment_interval;
 
     emit!(RepayEvent {

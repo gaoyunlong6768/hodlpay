@@ -3,6 +3,7 @@
   "rpc": "https://rpc.moderato.tempo.xyz",
   "explorer": "https://explore.testnet.tempo.xyz",
   "settlement": "0x0a5cdea68a5acd2d070ba9a2e39299356408c402",
+  "deployBlock": 37207450,
   "token": "0x20c0000000000000000000000000000000000001",
   "tokenSymbol": "AlphaUSD",
   "relayer": "0x51b09FbB59c8f300a16FA0c76d73EE5178fEe838",

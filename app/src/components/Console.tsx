@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
-import type { WalletName } from "@solana/wallet-adapter-base";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import WalletProviders from "@/components/WalletProviders";
-import { DemoWalletName } from "@/lib/demoWallet";
-import { DEPLOYMENT, explorerAddress, explorerTx, tempoExplorerTx } from "@/lib/hodlpay";
-import { useOnchain, type Balances, type OnchainView } from "@/lib/useOnchain";
+import { Card, PriceTicker, Row, WalletBar } from "@/components/ui";
+import { DEPLOYMENT, TEMPO, explorerTx, tempoExplorerTx } from "@/lib/hodlpay";
+import { payPath } from "@/lib/paylink";
+import { MERCHANTS, useOnchain, type Balances, type OnchainView } from "@/lib/useOnchain";
 import {
   ASSETS,
   PROTOCOL,
@@ -95,6 +95,23 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
       <div className="lg:col-span-12">
         <WalletBar balances={view?.balances ?? null} busy={busy} onFaucet={actions.faucet} />
       </div>
+      {(m.status === "margin" || m.status === "liquidatable") && (
+        <div
+          className={`lg:col-span-12 flex flex-wrap items-center gap-x-4 gap-y-1 border px-5 py-3 text-sm ${
+            m.status === "liquidatable" ? "border-vermilion bg-vermilion/10 text-vermilion" : "border-amber bg-amber/10 text-amber"
+          }`}
+        >
+          <span className="num text-xs font-medium uppercase tracking-widest">
+            {m.status === "liquidatable" ? "Liquidation risk" : "Margin alert"} · LTV {(m.ltv * 100).toFixed(1)}%
+          </span>
+          <span className="text-ink">
+            Repay {usd(m.debt - m.borrowLimit)} or lock about{" "}
+            {((m.debt - m.borrowLimit) / (state.prices.SOL * ASSETS.SOL.maxLtv)).toFixed(2)} more SOL to get back under
+            your max LTV.
+            {m.status === "liquidatable" && " Until then the keeper may sell part of your collateral."}
+          </span>
+        </div>
+      )}
       <div className="lg:col-span-4">
         <Vault
           state={state}
@@ -126,6 +143,7 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
           busy={busy === "repay"}
           creditBalance={view?.creditBalance ?? 0}
           onRepay={guard(actions.repay)}
+          onPayOff={guard(actions.payOff)}
         />
       </div>
       <div className="lg:col-span-4">
@@ -253,109 +271,6 @@ function Shell({
   );
 }
 
-function WalletBar({
-  balances,
-  busy,
-  onFaucet,
-}: {
-  balances: Balances | null;
-  busy: string | null;
-  onFaucet: () => void;
-}) {
-  const { wallets, wallet, publicKey, select, connect, disconnect, connecting } = useWallet();  const [open, setOpen] = useState(false);
-  const pending = useRef(false);
-
-  useEffect(() => {
-    if (wallet && !publicKey && pending.current) {
-      pending.current = false;
-      connect().catch(() => {});
-    }
-  }, [wallet, publicKey, connect]);
-
-  const choose = (name: WalletName) => {
-    pending.current = true;
-    select(name);
-    setOpen(false);
-  };
-
-  const addr = publicKey?.toBase58();
-  return (
-    <div className="receipt flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
-      {addr ? (
-        <>
-          <span className="flex items-center gap-2 text-sm">
-            <span className="h-2 w-2 rounded-full bg-mint" />
-            <span className="font-medium">{wallet?.adapter.name}</span>
-            <a
-              className="num text-xs text-ink-soft underline decoration-dotted"
-              href={explorerAddress(addr)}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {addr.slice(0, 4)}…{addr.slice(-4)}
-            </a>
-          </span>
-          {balances && (
-            <span className="num flex gap-4 text-xs text-ink-soft">
-              <span>{balances.SOL.toFixed(3)} SOL</span>
-              <span>{balances.zenZEC.toFixed(4)} zenZEC</span>
-              <span>{usd(balances.USDC)} USDC</span>
-            </span>
-          )}
-          <span className="ml-auto flex gap-2">
-            <button
-              onClick={onFaucet}
-              disabled={!!busy}
-              className="num border border-ink px-3 py-1.5 text-xs transition hover:bg-paper-2 disabled:opacity-40"
-            >
-              {busy === "faucet" ? "Sending…" : "Get test funds"}
-            </button>
-            <button onClick={() => disconnect()} className="num px-2 py-1.5 text-xs text-ink-soft underline">
-              disconnect
-            </button>
-          </span>
-        </>
-      ) : (
-        <>
-          <span className="text-sm text-ink-soft">
-            Real transactions on Solana {DEPLOYMENT.cluster}. No wallet? The demo wallet signs in your browser.
-          </span>
-          <span className="relative ml-auto flex gap-2">
-            <button
-              onClick={() => choose(DemoWalletName)}
-              disabled={connecting}
-              className="bg-ink px-4 py-2 text-sm font-medium text-paper transition hover:bg-mint"
-            >
-              {connecting ? "Connecting…" : "Use demo wallet"}
-            </button>
-            {wallets.some((w) => w.adapter.name !== DemoWalletName) && (
-              <button onClick={() => setOpen((o) => !o)} className="border border-ink px-4 py-2 text-sm">
-                Connect wallet
-              </button>
-            )}
-            {open && (
-              <div className="absolute right-0 top-full z-10 mt-1 min-w-48 border border-ink bg-paper">
-                {wallets
-                  .filter((w) => w.adapter.name !== DemoWalletName)
-                  .map((w) => (
-                    <button
-                      key={w.adapter.name}
-                      onClick={() => choose(w.adapter.name)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-paper-2"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={w.adapter.icon} alt="" className="h-4 w-4" />
-                      {w.adapter.name}
-                    </button>
-                  ))}
-              </div>
-            )}
-          </span>
-        </>
-      )}
-    </div>
-  );
-}
 
 function SimConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
   const [live, setLive] = useState<PriceFeed | null>(null);
@@ -467,55 +382,7 @@ function SimConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
   );
 }
 
-function Card({
-  title,
-  kicker,
-  children,
-  className = "",
-}: {
-  title: string;
-  kicker: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`receipt h-full p-5 ${className}`}>
-      <div className="mb-4 flex items-baseline justify-between">
-        <h3 className="font-display text-2xl">{title}</h3>
-        <span className="num text-[10px] uppercase tracking-[0.2em] text-ink-soft">{kicker}</span>
-      </div>
-      {children}
-    </div>
-  );
-}
 
-function PriceTicker({
-  label,
-  ok,
-  prices,
-  shock,
-}: {
-  label: string;
-  ok: boolean;
-  prices: Record<AssetId, number>;
-  shock: number;
-}) {
-  return (
-    <div className="num flex items-center gap-4 border border-rule bg-paper-2/60 px-3 py-2 text-xs">
-      <span className="flex items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-mint" : "bg-amber"}`} />
-        {label}
-      </span>
-      <span>SOL {usd(prices.SOL)}</span>
-      <span>ZEC {usd(prices.zenZEC)}</span>
-      {shock !== 0 && (
-        <span className={shock < 0 ? "text-vermilion" : "text-mint"}>
-          shock {(shock * 100).toFixed(0)}%
-        </span>
-      )}
-    </div>
-  );
-}
 
 function Vault({
   state,
@@ -673,14 +540,6 @@ function CreditLine({ m }: { m: ReturnType<typeof metrics> }) {
   );
 }
 
-function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
-  return (
-    <div className="flex justify-between py-1 text-sm">
-      <span className="text-ink-soft">{k}</span>
-      <span className={`num ${strong ? "font-medium" : ""}`}>{v}</span>
-    </div>
-  );
-}
 
 function Checkout({
   available,
@@ -750,6 +609,19 @@ function Checkout({
       <p className="num mt-1.5 text-[11px] text-ink-soft">
         Merchant gets {usd(c.price - fee)} now · fee {PROTOCOL.merchantFeeBps / 100}% · you pay 0% interest
       </p>
+      <Link
+        href={payPath({
+          merchant: c.merchant,
+          item: c.item,
+          amount: c.price,
+          rail,
+          to: MERCHANTS[c.merchant]?.toBase58(),
+          tempo: TEMPO.merchants[c.merchant],
+        })}
+        className="num mt-1 inline-block text-[11px] underline decoration-dotted"
+      >
+        Or pay through the merchant&apos;s hosted checkout link →
+      </Link>
 
       {receipt && <Receipt loan={receipt} />}
     </Card>
@@ -782,12 +654,14 @@ function Installments({
   busy,
   creditBalance = 0,
   onRepay,
+  onPayOff,
   onAdvance,
 }: {
   state: State;
   busy?: boolean;
   creditBalance?: number;
   onRepay: (id: string) => void;
+  onPayOff?: (id: string) => void;
   onAdvance?: () => void;
 }) {
   return (
@@ -847,13 +721,25 @@ function Installments({
                       : "paid off"}
                   </span>
                 </div>
-                <button
-                  disabled={!next || busy}
-                  onClick={() => onRepay(l.id)}
-                  className="bg-ink px-3 py-2 text-xs font-medium text-paper transition hover:bg-mint disabled:bg-ink/20"
-                >
-                  {next ? `Repay ${usd(next.amount)}` : "Done"}
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    disabled={!next || busy}
+                    onClick={() => onRepay(l.id)}
+                    className="bg-ink px-3 py-2 text-xs font-medium text-paper transition hover:bg-mint disabled:bg-ink/20"
+                  >
+                    {next ? `Repay ${usd(next.amount)}` : "Done"}
+                  </button>
+                  {onPayOff && next && l.installments.filter((i) => i.paidAt === null).length > 1 && (
+                    <button
+                      disabled={busy}
+                      onClick={() => onPayOff(l.id)}
+                      title="Repay every remaining installment now, no interest"
+                      className="border border-ink px-3 py-2 text-xs transition hover:bg-paper-2 disabled:opacity-40"
+                    >
+                      Pay off {usd(left)}
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}

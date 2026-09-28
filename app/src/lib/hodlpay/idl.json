@@ -739,6 +739,66 @@
       "args": []
     },
     {
+      "name": "refresh_price",
+      "discriminator": [
+        253,
+        61,
+        142,
+        248,
+        9,
+        32,
+        158,
+        32
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset.mint",
+                "account": "CollateralAsset"
+              }
+            ]
+          }
+        },
+        {
+          "name": "price_update"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "repay",
       "discriminator": [
         234,
@@ -1333,6 +1393,21 @@
       "code": 6015,
       "name": "InsufficientLiquidity",
       "msg": "Not enough idle liquidity: funds are lent out"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidPriceUpdate",
+      "msg": "Invalid Pyth price update account"
+    },
+    {
+      "code": 6017,
+      "name": "FeedMismatch",
+      "msg": "Price update is for a different feed"
+    },
+    {
+      "code": 6018,
+      "name": "PriceUncertain",
+      "msg": "Oracle confidence interval too wide"
     }
   ],
   "types": [
@@ -1356,6 +1431,15 @@
           {
             "name": "price_e6",
             "type": "u64"
+          },
+          {
+            "name": "pyth_feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
@@ -1431,6 +1515,18 @@
           {
             "name": "total_deposited",
             "type": "u64"
+          },
+          {
+            "name": "pyth_feed_id",
+            "docs": [
+              "Pyth feed id; all zeros means keeper-posted prices only."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
             "name": "bump",
@@ -1520,6 +1616,14 @@
             "name": "fees_earned",
             "docs": [
               "Lifetime merchant fees + late fees accrued to liquidity providers."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "unearned_fees",
+            "docs": [
+              "Merchant fees on open loans, earned installment by installment. Excluded",
+              "from pool value so LPs cannot capture a fee by depositing around a checkout."
             ],
             "type": "u64"
           },
@@ -1673,6 +1777,14 @@
           },
           {
             "name": "late_fees_paid",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "fee_earned",
             "type": "u64"
           },
           {

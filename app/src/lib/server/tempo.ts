@@ -3,10 +3,12 @@ import path from "node:path";
 import {
   createPublicClient,
   createWalletClient,
+  formatUnits,
   getAddress,
   http,
   isAddress,
   keccak256,
+  parseAbiItem,
   parseUnits,
   toBytes,
   type Abi,
@@ -21,8 +23,8 @@ import tempo from "@/lib/hodlpay/tempo.json";
 function relayerKey(): Hex {
   if (process.env.TEMPO_PRIVATE_KEY) return process.env.TEMPO_PRIVATE_KEY as Hex;
   const f = path.join(process.env.HODLPAY_STATE_DIR ?? path.join(process.cwd(), ".hodlpay"), "tempo-key.json");
-  if (!existsSync(f)) throw new Error("Tempo relayer key missing: run scripts/tempo-deploy.ts or set TEMPO_PRIVATE_KEY");
-  return JSON.parse(readFileSync(f, "utf8")).privateKey;
+  if (!existsSync(/*turbopackIgnore: true*/ f)) throw new Error("Tempo relayer key missing: run scripts/tempo-deploy.ts or set TEMPO_PRIVATE_KEY");
+  return JSON.parse(readFileSync(/*turbopackIgnore: true*/ f, "utf8")).privateKey;
 }
 
 /**
@@ -51,6 +53,51 @@ async function bridgeReceipt(sig: string): Promise<{ amount: number; merchant: H
   const merchant = memo?.slice(TEMPO_MEMO_PREFIX.length);
   if (!merchant || !isAddress(merchant)) throw new Error("Checkout has no Tempo payout memo");
   return { amount: received, merchant: getAddress(merchant) };
+}
+
+const SETTLED = parseAbiItem(
+  "event Settled(bytes32 indexed checkoutRef, address indexed merchant, address indexed token, uint256 amount)",
+);
+const LOG_SPAN = BigInt(100_000);
+
+export interface TempoSettlement {
+  hash: Hex;
+  block: number;
+  checkoutRef: Hex;
+  amount: number;
+  at: number;
+}
+
+/** Every settlement paid to `merchant` by the HodlPay contract, newest first. */
+export async function settlementsFor(merchant: Hex): Promise<TempoSettlement[]> {
+  const pub = createPublicClient({ chain: tempoModerato, transport: http(tempo.rpc) });
+  const latest = await pub.getBlockNumber();
+  const ranges: [bigint, bigint][] = [];
+  for (let from = BigInt(tempo.deployBlock ?? 0); from <= latest; from += LOG_SPAN) {
+    const to = from + LOG_SPAN - BigInt(1);
+    ranges.push([from, to < latest ? to : latest]);
+  }
+  const chunks = await Promise.all(
+    ranges.map(([fromBlock, toBlock]) =>
+      pub.getLogs({ address: tempo.settlement as Hex, event: SETTLED, args: { merchant }, fromBlock, toBlock }),
+    ),
+  );
+  const logs = chunks.flat();
+  const blocks = new Map<bigint, number>();
+  await Promise.all(
+    [...new Set(logs.map((l) => l.blockNumber))].map(async (n) =>
+      blocks.set(n, Number((await pub.getBlock({ blockNumber: n })).timestamp)),
+    ),
+  );
+  return logs
+    .map((l) => ({
+      hash: l.transactionHash,
+      block: Number(l.blockNumber),
+      checkoutRef: l.args.checkoutRef!,
+      amount: Number(formatUnits(l.args.amount!, 6)),
+      at: blocks.get(l.blockNumber)! * 1000,
+    }))
+    .sort((a, b) => b.block - a.block);
 }
 
 export async function settleOnTempo(sig: string) {

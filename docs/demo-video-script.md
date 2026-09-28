@@ -26,12 +26,15 @@ Lock 4 SOL, switch to zenZEC and lock 2. Point at the credit line card.
 
 Click the transaction link in the ledger to show it on the explorer.
 
-**0:45 – 1:15 · Checkout on Solana**
+**0:45 – 1:15 · A merchant payment link**
 
-Pick the Kinfolk Studio desk, Solana USDC rail, check out.
+Open `/merchant`, pick Kinfolk Studio, show the generated link, QR code and embed button. Click **Open checkout**.
+"Merchants integrate with a link or a button. This is the checkout their customer sees."
+
+On the checkout page, press **Buy now**.
 "The merchant gets paid right away: $1,240 minus the 3% fee, in USDC. I get four installments, zero interest."
 
-Show the merchant amount in the ledger and the installment schedule.
+Back on `/merchant`, press refresh: the sale appears with the amount received.
 
 **1:15 – 1:45 · Checkout on Tempo**
 
@@ -42,13 +45,13 @@ Click the Tempo transaction link and show the transfer on the Tempo explorer.
 
 **1:45 – 2:05 · Repay**
 
-Pay the first installment.
-"Repayments go back into the pool. Late ones, past a three-day grace period, pay a 1% late fee."
+Pay the first installment, then press **Pay off** on the other loan.
+"Repayments go back into the pool, and each one releases its share of the merchant fee to LPs. Pay early at no cost; past a three-day grace period there's a 1% late fee."
 
 **2:05 – 2:40 · Risk**
 
 Drag the risk desk slider to about −65%, release.
-"Now SOL and ZEC crash. First the position crosses the margin line and the user gets an alert. Past the liquidation line, the keeper steps in."
+"Now SOL and ZEC crash. First the position crosses the margin line and the console tells the user exactly how much to repay or top up. Past the liquidation line, the keeper steps in."
 
 Click **Run keeper: partial liquidation**.
 "It repays at most half the debt, takes collateral at a 5% bonus, and credits the payment to the user's next installments. The position is healthy again, and the pool never took a loss."
@@ -62,4 +65,4 @@ Supply 500 USDC in the Lend card, show share price and fees earned.
 
 ## Optional terminal cut (10 seconds)
 
-Show `cargo test -p hodlpay` (4 LiteSVM tests passing) and `npm run smoke` output ending with the LP withdrawal.
+Show `cargo test -p hodlpay` (5 LiteSVM tests passing, including the Pyth price refresh) and `npm run smoke` output ending with the LP withdrawal.

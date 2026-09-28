@@ -47,6 +47,32 @@ export type CollateralId = keyof typeof MINTS;
 
 export const USDC_DECIMALS = 6;
 
+export const PYTH_FEEDS: Record<CollateralId, string> = {
+  SOL: "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+  zenZEC: "be9b59d178f0d6a97ab4c343bff2aa69caa1eaae3e9048a65788c529b125bb24",
+};
+export const PYTH_RECEIVER_ID = new PublicKey("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
+const PYTH_PUSH_ORACLE_ID = new PublicKey("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT");
+
+/** Pyth sponsored price feed account (shard 0), kept fresh by Pyth on devnet and mainnet. */
+export function pythFeedAccount(feedHex: string) {
+  const shard = Buffer.alloc(2);
+  return PublicKey.findProgramAddressSync([shard, Buffer.from(feedHex, "hex")], PYTH_PUSH_ORACLE_ID)[0];
+}
+
+/** Decodes the fields HodlPay checks on-chain from a `PriceUpdateV2` account. */
+export function readPythUpdate(data: Buffer) {
+  const full = data[40] === 1;
+  const o = full ? 41 : 42;
+  return {
+    full,
+    feedId: data.subarray(o, o + 32).toString("hex"),
+    price: Number(data.readBigInt64LE(o + 32)),
+    exponent: data.readInt32LE(o + 48),
+    publishTime: Number(data.readBigInt64LE(o + 52)),
+  };
+}
+
 const seed = (s: string) => Buffer.from(s);
 const pda = (seeds: (Buffer | Uint8Array)[]) => PublicKey.findProgramAddressSync(seeds, PROGRAM_ID)[0];
 
@@ -271,6 +297,14 @@ export async function buildLiquidate(
   ];
 }
 
+/** Permissionless price refresh from a verified Pyth `PriceUpdateV2` account. */
+export async function buildRefreshPrice(p: HodlpayProgram, asset: CollateralId, priceUpdate: PublicKey) {
+  return p.methods
+    .refreshPrice()
+    .accountsPartial({ config: pdas.config(), asset: pdas.asset(MINTS[asset].mint), priceUpdate })
+    .instruction();
+}
+
 async function lpInstruction(p: HodlpayProgram, provider: PublicKey, deposit: boolean, units: BN) {
   const accounts = {
     provider,
@@ -308,6 +342,8 @@ export interface PoolStats {
   shares: number;
   sharePrice: number;
   feesEarned: number;
+  /** Merchant fees on open loans, credited to LPs as installments are repaid. */
+  unearned: number;
   utilization: number;
 }
 
@@ -321,7 +357,8 @@ export async function fetchPool(p: HodlpayProgram): Promise<PoolStats> {
   const i = Number(idle.value.uiAmount ?? 0);
   const debt = fromUnits(c.totalDebt, USDC_DECIMALS);
   const shares = Number(supply.value.uiAmount ?? 0);
-  const value = i + debt;
+  const unearned = fromUnits(c.unearnedFees, USDC_DECIMALS);
+  const value = i + debt - unearned;
   return {
     idle: i,
     debt,
@@ -329,7 +366,8 @@ export async function fetchPool(p: HodlpayProgram): Promise<PoolStats> {
     shares,
     sharePrice: shares ? value / shares : 1,
     feesEarned: fromUnits(c.feesEarned, USDC_DECIMALS),
-    utilization: value ? debt / value : 0,
+    unearned,
+    utilization: value ? (debt - unearned) / value : 0,
   };
 }
 
@@ -357,6 +395,8 @@ export interface ChainLoan {
   installmentsPaid: number;
   repaid: number;
   lateFeesPaid: number;
+  fee: number;
+  feeEarned: number;
   createdAt: number;
   nextDueAt: number;
 }
@@ -445,6 +485,8 @@ export async function fetchLoans(p: HodlpayProgram, owner: PublicKey, count: num
             installmentsPaid: l.installmentsPaid,
             repaid: fromUnits(l.repaid, USDC_DECIMALS),
             lateFeesPaid: fromUnits(l.lateFeesPaid, USDC_DECIMALS),
+            fee: fromUnits(l.fee, USDC_DECIMALS),
+            feeEarned: fromUnits(l.feeEarned, USDC_DECIMALS),
             createdAt: l.createdAt.toNumber(),
             nextDueAt: l.nextDueAt.toNumber(),
           },

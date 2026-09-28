@@ -15,6 +15,24 @@ export const MERCHANTS: Record<string, PublicKey> = {
 
 type LoanMeta = { merchant: string; item: string; rail: Rail; tempoTx?: string };
 
+export interface CheckoutInput {
+  merchant: string;
+  item: string;
+  price: number;
+  rail: Rail;
+  /** Solana payout wallet; defaults to the demo merchant with this name. */
+  payTo?: string;
+  /** Tempo payout address for the Tempo rail; defaults to the demo merchant with this name. */
+  tempoPayTo?: string;
+}
+
+export interface CheckoutResult extends CheckoutInput {
+  sig: string;
+  loan: string;
+  merchantReceived: number;
+  tempoHash?: string;
+}
+
 export interface Balances {
   SOL: number;
   zenZEC: number;
@@ -68,6 +86,7 @@ export function useOnchain() {
   const [view, setView] = useState<OnchainView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastCheckout, setLastCheckout] = useState<CheckoutResult | null>(null);
 
   const [genesis, setGenesis] = useState<string | null>(null);
   useEffect(() => {
@@ -163,6 +182,8 @@ export function useOnchain() {
   useEffect(() => {
     if (!owner) return;
     const tick = () => keeper().then(refresh).catch(() => refresh().catch(() => {}));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh().catch(() => {});
     tick();
     const t = setInterval(tick, 20_000);
     return () => clearInterval(t);
@@ -221,22 +242,29 @@ export function useOnchain() {
         log("withdraw", `Unlocked ${amount} ${asset} back to your wallet`, sig);
       }),
 
-    checkout: (input: { merchant: string; item: string; price: number; rail: Rail }) =>
+    checkout: (input: CheckoutInput) =>
       run("checkout", async () => {
+        setLastCheckout(null);
         await ensureFreshPrices();
         const pos = await hp.fetchPosition(program!, publicKey!);
         const tempo = input.rail === "tempo";
         if (tempo && !hp.DEPLOYMENT.tempoBridge) throw new Error("Tempo rail is not configured on this deployment");
-        const payee = tempo ? new PublicKey(hp.DEPLOYMENT.tempoBridge!) : MERCHANTS[input.merchant];
+        const tempoPayTo = input.tempoPayTo ?? hp.TEMPO.merchants[input.merchant];
+        if (tempo && !tempoPayTo) throw new Error("Merchant has no Tempo payout address");
+        const solanaPayTo = input.payTo ? new PublicKey(input.payTo) : MERCHANTS[input.merchant];
+        if (!tempo && !solanaPayTo) throw new Error("Merchant has no Solana payout wallet");
+        const payee = tempo ? new PublicKey(hp.DEPLOYMENT.tempoBridge!) : solanaPayTo;
         const ixs = await hp.buildCheckout(program!, publicKey!, payee, input.price, pos.loanCount);
-        if (tempo) ixs.push(hp.buildTempoMemo(hp.TEMPO.merchants[input.merchant]));
+        if (tempo) ixs.push(hp.buildTempoMemo(tempoPayTo));
         const sig = await send(ixs);
         const position = hp.pdas.position(publicKey!);
         const address = hp.pdas.loan(position, pos.loanCount).toBase58();
         const meta = load<Record<string, LoanMeta>>(metaKey, {});
         meta[address] = { merchant: input.merchant, item: input.item, rail: input.rail };
         save(metaKey, meta);
-        const net = input.price * 0.97;
+        const net = (await program!.account.loan.fetch(new PublicKey(address))).merchantReceived.toNumber() / 1e6;
+        const result: CheckoutResult = { ...input, sig, loan: address, merchantReceived: net };
+        setLastCheckout(result);
         log(
           "checkout",
           input.rail === "tempo"
@@ -250,6 +278,7 @@ export function useOnchain() {
           if (!res.ok) throw new Error(`Solana checkout done, Tempo payout failed: ${body.error}`);
           meta[address].tempoTx = body.hash;
           save(metaKey, meta);
+          setLastCheckout({ ...result, tempoHash: body.hash });
           log("checkout", `Relayed ${usd(net)} to ${input.merchant} on Tempo (${body.token})`, body.hash);
         }
       }),
@@ -260,6 +289,17 @@ export function useOnchain() {
         const chainIndex = (await hp.readonlyProgram(connection).account.loan.fetch(new PublicKey(loanAddress))).index;
         const sig = await send(await hp.buildRepay(program!, publicKey!, chainIndex));
         log("repay", `Repaid an installment on ${loan?.item ?? "loan"}`, sig);
+      }),
+
+    payOff: (loanAddress: string) =>
+      run("repay", async () => {
+        const loan = view?.state.loans.find((l) => l.id === loanAddress);
+        const l = await hp.readonlyProgram(connection).account.loan.fetch(new PublicKey(loanAddress));
+        const left = l.installmentsTotal - l.installmentsPaid;
+        if (left <= 0) throw new Error("Loan is already paid off");
+        const ixs = (await Promise.all(Array.from({ length: left }, () => hp.buildRepay(program!, publicKey!, l.index)))).flat();
+        const sig = await send(ixs);
+        log("repay", `Paid off ${loan?.item ?? "loan"} early: ${left} installments, no interest`, sig);
       }),
 
     lend: (amountUsd: number) =>
@@ -296,5 +336,5 @@ export function useOnchain() {
       }),
   };
 
-  return { owner, view, busy, error, setError, actions, refresh };
+  return { owner, view, busy, error, setError, actions, refresh, lastCheckout };
 }
