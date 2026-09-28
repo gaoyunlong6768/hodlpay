@@ -34,10 +34,19 @@ Payments & Remittance
 China
 
 ## Telegram
-（需要你本人提供）
+gaobanxian
 
-## Live product link
+## Anything else judges should know? (<=500)
+Live on Solana devnet and Tempo Moderato; open source with LiteSVM tests and CI. Worth checking: /audit re-derives every Tempo payout from its Solana checkout, and missed installments are collected from collateral after a 3-day grace period by a permissionless instruction (hourly keeper). Honest limits: unaudited; all 3 Tempo attesters are run by us for now; the keeper can post prices for the stress test; devnet uses test USDC and zenZEC, while tests pass against the real mainnet zenZEC mint.
+
+## Project website / Live product link
 https://hodlpay.vercel.app
 
+## GitHub link
+https://github.com/gaoyunlong6768/hodlpay
+
+## Repo context (<=500)
+The whole product, built during the hackathon: protocol/ is the Anchor program on Solana with LiteSVM tests, tempo/ is the Solidity settlement contract on Tempo Moderato, app/ is the Next.js console, hosted checkout, merchant portal and Tempo audit page, plus keeper, attester and smoke-test scripts. README covers architecture, trust assumptions, how it compares, and how to run it locally.
+
 ## Access instructions (<=300)
-No login. Solana devnet (Tempo payouts on Tempo testnet). Open the console, click "Use demo wallet" (or Phantom on devnet), then "Get test funds". Lock zenZEC, buy an item, repay, then drag Risk desk to -60% to see the keeper liquidate. Merchant portal: /merchant
+No login. Solana devnet (Tempo payouts on Tempo testnet). Open the console, click "Use demo wallet" (or Phantom on devnet), then "Get test funds". Lock zenZEC, buy an item, repay, then drag Risk desk to -60% to see the keeper liquidate. Merchant portal: /merchant. Tempo payout audit: /audit
