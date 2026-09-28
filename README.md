@@ -1,5 +1,7 @@
 # HodlPay
 
+[![CI](https://github.com/gaoyunlong6768/hodlpay/actions/workflows/ci.yml/badge.svg)](https://github.com/gaoyunlong6768/hodlpay/actions/workflows/ci.yml)
+
 **Spend your crypto. Keep your crypto.**
 
 HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash on Solana) as collateral and get a stablecoin credit line they can use at any checkout. The merchant is paid upfront in USDC on Solana or in stablecoins on Tempo; the user repays in 4 interest-free installments. No selling, no taxable event, no credit check.
@@ -205,7 +207,23 @@ The release profile builds with `opt-level = "z"` (about 390 KB), so the deploy 
 | `USDC_MINT`, `ZEC_MINT` | bootstrap | Use existing mints (mainnet USDC / zenZEC) instead of test mints |
 | `TEMPO_PRIVATE_KEY` | Tempo relayer | Relayer key; defaults to `app/.hodlpay/tempo-key.json` |
 | `HODLPAY_STATE_DIR` | API routes | Writable dir for demo state (use `/tmp` on serverless) |
+| `SOLANA_RPC` | API routes | Private RPC for server-side calls; browsers keep the public RPC from `deployment.json` |
+| `FAUCET_RESERVE_SOL` | faucet | Admin SOL kept for keeper fees; the faucet pauses below it (default 1) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | keeper | Push margin alerts |
+
+## Trust assumptions and known limitations
+
+HodlPay is a hackathon build on devnet and has not been audited. What a user has to trust today, and what would change before mainnet:
+
+| Area | Today | Before mainnet |
+| --- | --- | --- |
+| Custody | Collateral and pool USDC sit in program-owned PDAs. There is no admin instruction that can move them; only the position owner (withdraw, repay), LPs (their share of idle liquidity) and liquidators (past the liquidation line) move funds. The program's upgrade authority is still a single key. | Upgrade authority to a multisig with a timelock, then freeze. |
+| Oracle | `refresh_price` is permissionless and fully checks Pyth updates. `update_price` lets the keeper key post any positive price; the demo uses it for the stress test and for assets without a fresh sponsored feed. A compromised keeper key could therefore trigger liquidations. | Pyth-only pricing (remove or bound `update_price`), plus a confidence and deviation guard against the last price. |
+| Liquidation | The `liquidate` instruction is permissionless, capped at 50% of debt per call with a 5% bonus. On the demo site the keeper only liquidates the position of the visitor who presses the button, so one visitor's stress test never liquidates another's position. | Open liquidation to any bot; keeper becomes one liquidator among many. |
+| Tempo rail | A single relayer key settles on Tempo (see [Tempo rail](#tempo-rail)); the contract blocks double settlement but trusts the relayer for the amount. | Several co-signing relayers, then light-client or attestation verification. |
+| Collateral | Devnet uses test USDC and test zenZEC mints the admin can mint. | Real USDC and Zenrock zenZEC (`ZEC_MINT`), no mint authority. |
+| Demo operations | The site's faucet and keeper are paid by one devnet admin wallet; the faucet pauses below 1 SOL so price updates keep running. The stress test shifts the shared devnet oracle and reverts to live prices after 3 minutes. | Not applicable on mainnet (no faucet, no stress test). |
+| Credit risk | Installment plans are over-collateralized (max LTV 40–50%), there is no credit scoring, and a 1% late fee is the only penalty besides liquidation. | Tune tiers on live volatility data; add a reserve fund from part of the merchant fee. |
 
 ## Roadmap
 
