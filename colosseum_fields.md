@@ -35,3 +35,9 @@ China
 
 ## Telegram
 （需要你本人提供）
+
+## Live product link
+https://hodlpay.vercel.app
+
+## Access instructions (<=300)
+No login. Solana devnet (Tempo payouts on Tempo testnet). Open the console, click "Use demo wallet" (or Phantom on devnet), then "Get test funds". Lock zenZEC, buy an item, repay, then drag Risk desk to -60% to see the keeper liquidate. Merchant portal: /merchant
