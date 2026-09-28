@@ -110,13 +110,17 @@ export function useOnchain() {
     stressRef.current = stress;
   }, [stress]);
 
-  const [genesis, setGenesis] = useState<string | null>(null);
+  const genesisKey = `hodlpay.genesis.${connection.rpcEndpoint}`;
+  const [genesis, setGenesis] = useState<string | null>(() => load<string | null>(genesisKey, null));
   useEffect(() => {
     connection
       .getGenesisHash()
-      .then((g) => setGenesis(g.slice(0, 8)))
-      .catch(() => setGenesis(hp.DEPLOYMENT.cluster));
-  }, [connection]);
+      .then((g) => {
+        setGenesis(g.slice(0, 8));
+        save(genesisKey, g.slice(0, 8));
+      })
+      .catch(() => setGenesis((cached) => cached ?? hp.DEPLOYMENT.cluster));
+  }, [connection, genesisKey]);
   const scope = owner && genesis ? `hodlpay.${genesis}` : "";
   const eventsKey = scope ? `${scope}.events.${owner}` : "";
   const metaKey = scope ? `${scope}.loans.${owner}` : "";
@@ -131,9 +135,11 @@ export function useOnchain() {
   );
 
   const refreshId = useRef(0);
+  const loaded = useRef(false);
   const refresh = useCallback(async () => {
     const id = ++refreshId.current;
     if (!program || !publicKey || !scope) {
+      loaded.current = false;
       setView(null);
       return;
     }
@@ -173,6 +179,10 @@ export function useOnchain() {
       .reverse();
 
     if (id !== refreshId.current) return;
+    if (!loaded.current) {
+      loaded.current = true;
+      setError((e) => (e?.startsWith("Could not read your position") ? null : e));
+    }
     setView({
       state: {
         now: Date.now(),
@@ -225,13 +235,18 @@ export function useOnchain() {
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     if (!owner) {
+      loaded.current = false;
       setView(null);
       setLastCheckout(null);
       setError(null);
       return;
     }
-    const tick = () => keeper().then(refresh).catch(() => refresh().catch(() => {}));
-    refresh().catch(() => {});
+    const load = () =>
+      refresh().catch((e) => {
+        if (!loaded.current) setError(`Could not read your position from Solana ${hp.DEPLOYMENT.cluster}, retrying. ${errorMessage(e)}`);
+      });
+    const tick = () => keeper().then(refresh).catch(load);
+    load();
     /* eslint-enable react-hooks/set-state-in-effect */
     tick();
     const t = setInterval(tick, 20_000);

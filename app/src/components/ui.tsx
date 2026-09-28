@@ -2,11 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import type { WalletName } from "@solana/wallet-adapter-base";
+import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
 import { DemoWalletName } from "@/lib/demoWallet";
 import { DEPLOYMENT, explorerAddress } from "@/lib/hodlpay";
 import type { Balances } from "@/lib/useOnchain";
 import { usd, type AssetId } from "@/lib/engine";
+
+/** A saved wallet is being reconnected; the adapter clears the selection if that fails. */
+export function useWalletRestoring() {
+  const { wallet, publicKey, connecting } = useWallet();
+  const ready = wallet?.readyState === WalletReadyState.Installed || wallet?.readyState === WalletReadyState.Loadable;
+  return connecting || (ready && !publicKey);
+}
 
 export function WalletBar({
   balances,
@@ -17,7 +24,9 @@ export function WalletBar({
   busy: string | null;
   onFaucet: () => void;
 }) {
-  const { wallets, wallet, publicKey, select, connect, disconnect, connecting } = useWallet();  const [open, setOpen] = useState(false);
+  const { wallets, wallet, publicKey, select, connect, disconnect } = useWallet();
+  const connecting = useWalletRestoring();
+  const [open, setOpen] = useState(false);
   const pending = useRef(false);
 
   useEffect(() => {
@@ -50,12 +59,14 @@ export function WalletBar({
               {addr.slice(0, 4)}…{addr.slice(-4)}
             </a>
           </span>
-          {balances && (
+          {balances ? (
             <span className="num flex gap-4 text-xs text-ink-soft">
               <span>{balances.SOL.toFixed(3)} SOL</span>
               <span>{balances.zenZEC.toFixed(4)} zenZEC</span>
               <span>{usd(balances.USDC)} USDC</span>
             </span>
+          ) : (
+            <Skel className="w-56" />
           )}
           <span className="ml-auto flex gap-2">
             <button
@@ -73,7 +84,9 @@ export function WalletBar({
       ) : (
         <>
           <span className="text-sm text-ink-soft">
-            Real transactions on Solana {DEPLOYMENT.cluster}. No wallet? The demo wallet signs in your browser.
+            {connecting && wallet
+              ? `Reconnecting ${wallet.adapter.name}…`
+              : `Real transactions on Solana ${DEPLOYMENT.cluster}. No wallet? The demo wallet signs in your browser.`}
           </span>
           <span className="relative ml-auto flex gap-2">
             <button
@@ -134,6 +147,11 @@ export function Card({
   );
 }
 
+/** Placeholder for a number that is still loading. */
+export function Skel({ className = "w-16" }: { className?: string }) {
+  return <span aria-hidden className={`inline-block h-[0.8em] animate-pulse bg-ink/10 align-middle ${className}`} />;
+}
+
 export function PriceTicker({
   label,
   ok,
@@ -142,7 +160,7 @@ export function PriceTicker({
 }: {
   label: string;
   ok: boolean;
-  prices: Record<AssetId, number>;
+  prices: Record<AssetId, number> | null;
   shock: number;
 }) {
   return (
@@ -151,8 +169,8 @@ export function PriceTicker({
         <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-mint" : "bg-amber"}`} />
         {label}
       </span>
-      <span>SOL {usd(prices.SOL)}</span>
-      <span>ZEC {usd(prices.zenZEC)}</span>
+      <span>SOL {prices ? usd(prices.SOL) : <Skel className="w-12" />}</span>
+      <span>ZEC {prices ? usd(prices.zenZEC) : <Skel className="w-12" />}</span>
       {shock !== 0 && (
         <span className={shock < 0 ? "text-vermilion" : "text-mint"}>
           shock {(shock * 100).toFixed(0)}%
@@ -162,7 +180,7 @@ export function PriceTicker({
   );
 }
 
-export function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
+export function Row({ k, v, strong }: { k: string; v: React.ReactNode; strong?: boolean }) {
   return (
     <div className="flex justify-between py-1 text-sm">
       <span className="text-ink-soft">{k}</span>

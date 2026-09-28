@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import WalletProviders from "@/components/WalletProviders";
-import { Card, PriceTicker, Row, WalletBar } from "@/components/ui";
+import { Card, PriceTicker, Row, Skel, WalletBar, useWalletRestoring } from "@/components/ui";
 import { DEPLOYMENT, TEMPO, explorerTx, tempoExplorerTx } from "@/lib/hodlpay";
 import { payPath } from "@/lib/paylink";
 import { CATALOG, MERCHANTS, useOnchain, type Balances, type OnchainView } from "@/lib/useOnchain";
@@ -44,19 +44,47 @@ export default function Console() {
   );
 }
 
-function ConsoleInner() {
-  const [mode, setMode] = useState<Mode>("chain");
-  return mode === "chain" ? <ChainConsole mode={mode} setMode={setMode} /> : <SimConsole mode={mode} setMode={setMode} />;
+function useLivePrices() {
+  const [live, setLive] = useState<PriceFeed | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetch("/api/prices", { cache: "no-store" })
+        .then((res) => (res.ok ? (res.json() as Promise<PriceFeed>) : null))
+        .then((feed) => {
+          if (alive && feed) setLive(feed);
+        })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 30_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+  return live;
 }
 
-function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
+function ConsoleInner() {
+  const [mode, setMode] = useState<Mode>("chain");
+  const live = useLivePrices();
+  return mode === "chain" ? (
+    <ChainConsole mode={mode} setMode={setMode} live={live} />
+  ) : (
+    <SimConsole mode={mode} setMode={setMode} live={live} />
+  );
+}
+
+function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) => void; live: PriceFeed | null }) {
   const chain = useOnchain();
   const { view, busy, actions } = chain;
+  const restoring = useWalletRestoring();
   const [shock, setShock] = useState(0);
   const [showReceipt, setShowReceipt] = useState(false);
-  const empty = useMemo(() => initialState(FALLBACK_PRICES), []);
+  const empty = useMemo(() => initialState(live?.prices ?? FALLBACK_PRICES), [live]);
   const state = view?.state ?? empty;
   const m = useMemo(() => metrics(state, view?.debt ?? 0), [state, view?.debt]);
+  const loading = !view && (restoring || !!chain.owner);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -75,9 +103,17 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
       setMode={setMode}
       ticker={
         <PriceTicker
-          label={view ? `on-chain oracle · ${view.priceAge}s ago` : `${DEPLOYMENT.cluster} · connect to load`}
+          label={
+            view
+              ? `on-chain oracle · ${view.priceAge}s ago`
+              : loading
+                ? "reading on-chain oracle…"
+                : live
+                  ? `market · ${live.source}`
+                  : `${DEPLOYMENT.cluster} · connect to load`
+          }
           ok={!!view && view.priceAge < 120}
-          prices={state.prices}
+          prices={view?.state.prices ?? (loading ? null : (live?.prices ?? null))}
           shock={shock}
         />
       }
@@ -128,17 +164,20 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
           balances={view?.balances}
           defaultAsset="zenZEC"
           defaultAmount="2"
+          loading={loading}
+          priced={!!view || !!live}
           busy={busy === "deposit" || busy === "withdraw"}
           onDeposit={guard(actions.deposit)}
           onWithdraw={guard(actions.withdraw)}
         />
       </div>
       <div className="lg:col-span-4">
-        <CreditLine m={m} />
+        <CreditLine m={m} loading={loading} />
       </div>
       <div className="lg:col-span-4">
         <Checkout
           available={m.available}
+          loading={loading}
           busy={busy === "checkout"}
           onPay={guard(async (input: Parameters<typeof actions.checkout>[0]) => {
             setShowReceipt(false);
@@ -152,6 +191,7 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
       <div className="lg:col-span-8">
         <Installments
           state={state}
+          loading={loading}
           busy={busy === "repay"}
           creditBalance={view?.creditBalance ?? 0}
           onRepay={guard(actions.repay)}
@@ -286,27 +326,11 @@ function Shell({
 }
 
 
-function SimConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
-  const [live, setLive] = useState<PriceFeed | null>(null);
-  const [state, setState] = useState<State>(() => initialState(FALLBACK_PRICES));
+function SimConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) => void; live: PriceFeed | null }) {
+  const [state, setState] = useState<State>(() => initialState(live?.prices ?? FALLBACK_PRICES));
   const [shock, setShock] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Loan | null>(null);
-
-  const refreshPrices = useCallback(async () => {
-    try {
-      const res = await fetch("/api/prices", { cache: "no-store" });
-      if (!res.ok) return;
-      setLive((await res.json()) as PriceFeed);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refreshPrices();
-    const t = setInterval(refreshPrices, 30_000);
-    return () => clearInterval(t);
-  }, [refreshPrices]);
 
   const base = live?.prices ?? FALLBACK_PRICES;
   useEffect(() => {
@@ -395,6 +419,8 @@ function Vault({
   busy,
   defaultAsset = "SOL",
   defaultAmount = "25",
+  loading,
+  priced = true,
   onDeposit,
   onWithdraw,
 }: {
@@ -402,6 +428,9 @@ function Vault({
   balances?: Balances;
   defaultAsset?: AssetId;
   defaultAmount?: string;
+  loading?: boolean;
+  /** False until real prices arrive; `state.prices` is only a placeholder then. */
+  priced?: boolean;
   busy?: boolean;
   onDeposit: (a: AssetId, x: number) => void;
   onWithdraw: (a: AssetId, x: number) => void;
@@ -431,8 +460,14 @@ function Vault({
                 </span>
               </span>
               <span className="num text-right text-sm">
-                <span className="block">{locked.toLocaleString("en-US", { maximumFractionDigits: 4 })}</span>
-                <span className="block text-[11px] opacity-70">{usd(locked * state.prices[id])}</span>
+                {loading ? (
+                  <Skel className="w-14" />
+                ) : (
+                  <>
+                    <span className="block">{locked.toLocaleString("en-US", { maximumFractionDigits: 4 })}</span>
+                    <span className="block text-[11px] opacity-70">{usd(locked * state.prices[id])}</span>
+                  </>
+                )}
               </span>
             </button>
           );
@@ -454,8 +489,14 @@ function Vault({
         className="num w-full border border-rule bg-transparent px-3 py-2 text-lg outline-none focus:border-ink"
       />
       <p className="num mt-1 text-[11px] text-ink-soft">
-        ≈ {usd((Number.isFinite(x) ? x : 0) * state.prices[asset])} · adds{" "}
-        {usd((Number.isFinite(x) ? x : 0) * state.prices[asset] * ASSETS[asset].maxLtv)} credit
+        {priced ? (
+          <>
+            ≈ {usd((Number.isFinite(x) ? x : 0) * state.prices[asset])} · adds{" "}
+            {usd((Number.isFinite(x) ? x : 0) * state.prices[asset] * ASSETS[asset].maxLtv)} credit
+          </>
+        ) : (
+          <Skel className="w-40" />
+        )}
       </p>
       {asset === "zenZEC" && (
         <p className="mt-2 text-[11px] leading-relaxed text-ink-soft">
@@ -491,9 +532,10 @@ function Vault({
   );
 }
 
-function CreditLine({ m }: { m: ReturnType<typeof metrics> }) {
-  const tone =
-    m.status === "liquidatable"
+function CreditLine({ m, loading }: { m: ReturnType<typeof metrics>; loading?: boolean }) {
+  const tone = loading
+    ? "text-ink-soft"
+    : m.status === "liquidatable"
       ? "text-vermilion"
       : m.status === "margin"
         ? "text-amber"
@@ -514,17 +556,19 @@ function CreditLine({ m }: { m: ReturnType<typeof metrics> }) {
   return (
     <Card title="Credit line" kicker="02 · risk engine">
       <p className="num text-[11px] uppercase tracking-widest text-ink-soft">Available to spend</p>
-      <p className="font-display text-6xl leading-none">{usd(m.available)}</p>
+      <p className="font-display text-6xl leading-none">{loading ? <Skel className="w-44" /> : usd(m.available)}</p>
       <p className="num mt-2 text-xs text-ink-soft">
-        of {usd(m.borrowLimit)} limit · {usd(m.debt)} owed
+        {loading ? "Reading your position…" : `of ${usd(m.borrowLimit)} limit · ${usd(m.debt)} owed`}
       </p>
 
       <div className="mt-6">
         <div className="mb-1 flex justify-between text-xs">
-          <span className="num text-ink-soft">LTV {(m.ltv * 100).toFixed(1)}%</span>
+          <span className="num text-ink-soft">LTV {loading ? "—" : `${(m.ltv * 100).toFixed(1)}%`}</span>
           <span className={`num font-medium ${tone}`}>
-            <span className={`mr-1.5 inline-block h-2 w-2 rounded-full bg-current ${m.status === "liquidatable" ? "alarm" : ""}`} />
-            {label}
+            <span
+              className={`mr-1.5 inline-block h-2 w-2 rounded-full bg-current ${m.status === "liquidatable" && !loading ? "alarm" : ""}`}
+            />
+            {loading ? "Loading" : label}
           </span>
         </div>
         <div className="relative h-3 border border-ink/80 bg-paper-2">
@@ -548,12 +592,12 @@ function CreditLine({ m }: { m: ReturnType<typeof metrics> }) {
       </div>
 
       <div className="dash mt-9 pt-3">
-        <Row k="Collateral value" v={usd(m.collateralValue)} />
-        <Row k="Margin alert at" v={usd(m.marginLimit)} />
-        <Row k="Liquidation at" v={usd(m.liquidationLimit)} />
+        <Row k="Collateral value" v={loading ? <Skel /> : usd(m.collateralValue)} />
+        <Row k="Margin alert at" v={loading ? <Skel /> : usd(m.marginLimit)} />
+        <Row k="Liquidation at" v={loading ? <Skel /> : usd(m.liquidationLimit)} />
         <Row
           k="Price drop to liquidation"
-          v={m.debt > 0 ? `${(m.dropToLiquidation * 100).toFixed(1)}%` : "—"}
+          v={loading ? <Skel className="w-10" /> : m.debt > 0 ? `${(m.dropToLiquidation * 100).toFixed(1)}%` : "—"}
           strong
         />
       </div>
@@ -564,12 +608,14 @@ function CreditLine({ m }: { m: ReturnType<typeof metrics> }) {
 
 function Checkout({
   available,
+  loading,
   busy,
   onPay,
   receipt,
   receiptPending,
 }: {
   available: number;
+  loading?: boolean;
   busy?: boolean;
   onPay: (i: { merchant: string; item: string; price: number; rail: Rail }) => void;
   receipt: Loan | null;
@@ -619,14 +665,16 @@ function Checkout({
 
       <button
         onClick={() => onPay({ ...c, rail })}
-        disabled={c.price > available || busy}
+        disabled={loading || c.price > available || busy}
         className="mt-3 w-full bg-ink px-3 py-3 text-sm font-medium text-paper transition hover:bg-mint disabled:cursor-not-allowed disabled:bg-ink/30"
       >
         {busy
           ? rail === "tempo"
             ? "Paying on Solana, relaying to Tempo…"
             : "Paying merchant…"
-          : c.price > available
+          : loading
+            ? "Loading your credit line…"
+            : c.price > available
             ? `Need ${usd(c.price - available)} more credit`
             : `Pay 4 × ${usd(c.price / 4)} with HodlPay`}
       </button>
@@ -677,6 +725,7 @@ function Receipt({ loan, pending }: { loan: Loan; pending?: boolean }) {
 
 function Installments({
   state,
+  loading,
   busy,
   creditBalance = 0,
   onRepay,
@@ -684,6 +733,7 @@ function Installments({
   onAdvance,
 }: {
   state: State;
+  loading?: boolean;
   busy?: boolean;
   creditBalance?: number;
   onRepay: (id: string) => void;
@@ -707,7 +757,9 @@ function Installments({
           </button>
         )}
       </div>
-      {state.loans.length === 0 ? (
+      {loading ? (
+        <p className="animate-pulse py-8 text-center text-sm text-ink-soft">Loading your purchases…</p>
+      ) : state.loans.length === 0 ? (
         <p className="py-8 text-center text-sm text-ink-soft">No purchases yet. Lock collateral, then check out.</p>
       ) : (
         <div className="divide-y divide-dashed divide-rule">

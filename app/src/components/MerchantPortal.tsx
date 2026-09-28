@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { Card, Row } from "@/components/ui";
+import { Card, Row, Skel } from "@/components/ui";
 import * as hp from "@/lib/hodlpay";
 import { usd, type Rail } from "@/lib/engine";
 import { isEvm, isSolana, payPath, type PayRequest } from "@/lib/paylink";
@@ -339,6 +339,7 @@ function Sales({ profile }: { profile: Profile }) {
     const received = s.reduce((a, x) => a + x.received, 0) + t.reduce((a, x) => a + x.amount, 0);
     return { orders: s.length + t.length, gross, received, fees: gross - s.reduce((a, x) => a + x.received, 0) };
   }, [sales, payouts]);
+  const pending = loading && ((isSolana(profile.solana) && !sales) || (isEvm(profile.tempo) && !payouts));
 
   return (
     <Card title="Sales" kicker="03 · settlements">
@@ -346,15 +347,15 @@ function Sales({ profile }: { profile: Profile }) {
         <div className="num grid grid-cols-2 gap-6 text-sm sm:grid-cols-3">
           <div>
             <p className="text-[11px] uppercase tracking-widest text-ink-soft">Orders</p>
-            <p className="font-display text-3xl">{totals.orders}</p>
+            <p className="font-display text-3xl">{pending ? <Skel className="w-10" /> : totals.orders}</p>
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-widest text-ink-soft">Received</p>
-            <p className="font-display text-3xl">{usd(totals.received)}</p>
+            <p className="font-display text-3xl">{pending ? <Skel className="w-28" /> : usd(totals.received)}</p>
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-widest text-ink-soft">Fees (Solana)</p>
-            <p className="font-display text-3xl">{usd(totals.fees)}</p>
+            <p className="font-display text-3xl">{pending ? <Skel className="w-20" /> : usd(totals.fees)}</p>
           </div>
         </div>
         <button onClick={load} disabled={loading} className="num border border-ink px-3 py-1.5 text-xs transition hover:bg-paper-2 disabled:opacity-40">

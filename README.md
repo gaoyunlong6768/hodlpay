@@ -207,7 +207,7 @@ The release profile builds with `opt-level = "z"` (about 390 KB), so the deploy 
 | `USDC_MINT`, `ZEC_MINT` | bootstrap | Use existing mints (mainnet USDC / zenZEC) instead of test mints |
 | `TEMPO_PRIVATE_KEY` | Tempo relayer | Relayer key; defaults to `app/.hodlpay/tempo-key.json` |
 | `HODLPAY_STATE_DIR` | API routes | Writable dir for demo state (use `/tmp` on serverless) |
-| `SOLANA_RPC` | API routes | Private RPC for server-side calls; browsers keep the public RPC from `deployment.json` |
+| `SOLANA_RPC` | API routes | Private RPC for server-side calls; browsers reach it through `/api/rpc` (method allowlist, per-IP limit, falls back to the public RPC from `deployment.json` when rate-limited) |
 | `FAUCET_RESERVE_SOL` | faucet | Admin SOL kept for keeper fees; the faucet pauses below it (default 1) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | keeper | Push margin alerts |
 

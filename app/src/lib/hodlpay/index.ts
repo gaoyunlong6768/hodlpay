@@ -93,8 +93,19 @@ export const pdas = {
 export const ata = (mint: PublicKey, owner: PublicKey) =>
   getAssociatedTokenAddressSync(mint, owner, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 
-/** Server code can use a private RPC (`SOLANA_RPC`, never sent to the browser); browsers use the public one. */
+/**
+ * Server code uses a private RPC (`SOLANA_RPC`, never sent to the browser). Browsers call it through `/api/rpc`;
+ * websocket subscriptions stay on the public endpoint.
+ */
+export const BROWSER_RPC = {
+  endpoint: () => `${window.location.origin}/api/rpc`,
+  wsEndpoint: DEPLOYMENT.rpc.replace(/^http/, "ws"),
+};
+
 export function connection() {
+  if (typeof window !== "undefined") {
+    return new Connection(BROWSER_RPC.endpoint(), { commitment: "confirmed", wsEndpoint: BROWSER_RPC.wsEndpoint });
+  }
   return new Connection(process.env.SOLANA_RPC || DEPLOYMENT.rpc, "confirmed");
 }
 
