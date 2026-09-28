@@ -169,13 +169,13 @@ export const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
 export function deposit(s: State, asset: AssetId, amount: number): State {
-  if (amount <= 0) throw new Error("Amount must be positive");
+  if (!(amount > 0)) throw new Error("Amount must be positive");
   const next = { ...s, collateral: { ...s.collateral, [asset]: s.collateral[asset] + amount } };
   return checkMargin(log(next, "deposit", `Locked ${amount} ${asset} as collateral`));
 }
 
 export function withdraw(s: State, asset: AssetId, amount: number): State {
-  if (amount <= 0) throw new Error("Amount must be positive");
+  if (!(amount > 0)) throw new Error("Amount must be positive");
   if (amount > s.collateral[asset]) throw new Error(`Only ${s.collateral[asset]} ${asset} locked`);
   const next = { ...s, collateral: { ...s.collateral, [asset]: s.collateral[asset] - amount } };
   const m = metrics(next);
@@ -188,7 +188,7 @@ export function checkout(
   input: { merchant: string; item: string; price: number; rail: Rail },
 ): State {
   const m = metrics(s);
-  if (input.price <= 0) throw new Error("Price must be positive");
+  if (!(input.price > 0)) throw new Error("Price must be positive");
   if (input.price > m.available + 1e-9) {
     throw new Error(`Not enough credit: ${usd(m.available)} available`);
   }

@@ -15,9 +15,18 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import type { TokenBalance } from "@solana/web3.js";
+import { utils } from "@anchor-lang/core";
+import type { ParsedTransactionWithMeta, PartiallyDecodedInstruction } from "@solana/web3.js";
 import { tempoModerato } from "viem/chains";
-import { DEPLOYMENT, MEMO_PROGRAM_ID, PROGRAM_ID, TEMPO_MEMO_PREFIX, USDC_MINT, connection } from "@/lib/hodlpay";
+import {
+  DEPLOYMENT,
+  MEMO_PROGRAM_ID,
+  PROGRAM_ID,
+  TEMPO_MEMO_PREFIX,
+  connection,
+  fromUnits,
+  readonlyProgram,
+} from "@/lib/hodlpay";
 import tempo from "@/lib/hodlpay/tempo.json";
 
 function relayerKey(): Hex {
@@ -27,32 +36,49 @@ function relayerKey(): Hex {
   return JSON.parse(readFileSync(/*turbopackIgnore: true*/ f, "utf8")).privateKey;
 }
 
+const CHECKOUT_LOAN = 3;
+const CHECKOUT_MERCHANT = 4;
+
+async function confirmedTx(sig: string): Promise<ParsedTransactionWithMeta> {
+  const conn = connection();
+  for (let attempt = 0; ; attempt++) {
+    const tx = await conn.getParsedTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    if (tx) return tx;
+    if (attempt >= 5) throw new Error("Solana checkout not found");
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
 /**
- * Reads a confirmed HodlPay checkout: the USDC the Tempo bridge received (from
- * token balance changes) and the merchant payout address committed in its memo.
- * Nothing about the payout is taken from the caller.
+ * Reads a confirmed HodlPay checkout: exactly one `checkout` instruction paying
+ * the Tempo bridge, the amount the resulting loan recorded as paid out, and the
+ * merchant payout address committed in its memo. Nothing is taken from the caller.
  */
 async function bridgeReceipt(sig: string): Promise<{ amount: number; merchant: Hex }> {
   if (!DEPLOYMENT.tempoBridge) throw new Error("tempoBridge not configured in deployment.json");
-  const tx = await connection().getParsedTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
-  if (!tx || tx.meta?.err) throw new Error("Solana checkout not found or failed");
-  const invokesHodlpay = tx.transaction.message.instructions.some((ix) => ix.programId.equals(PROGRAM_ID));
-  if (!invokesHodlpay) throw new Error("Transaction is not a HodlPay checkout");
-  const usdc = USDC_MINT.toBase58();
-  const bal = (list: TokenBalance[] | null | undefined) =>
-    (list ?? [])
-      .filter((b) => b.mint === usdc && b.owner === DEPLOYMENT.tempoBridge)
-      .reduce((s, b) => s + Number(b.uiTokenAmount.uiAmount ?? 0), 0);
-  const received = bal(tx.meta?.postTokenBalances) - bal(tx.meta?.preTokenBalances);
-  if (received <= 0) throw new Error("Checkout did not pay the Tempo bridge");
+  const tx = await confirmedTx(sig);
+  if (tx.meta?.err) throw new Error("Solana checkout failed");
+  const p = readonlyProgram();
+  const disc = Buffer.from(p.idl.instructions.find((i) => i.name === "checkout")!.discriminator);
+  const checkouts = tx.transaction.message.instructions.filter(
+    (ix): ix is PartiallyDecodedInstruction =>
+      ix.programId.equals(PROGRAM_ID) && "data" in ix && Buffer.from(utils.bytes.bs58.decode(ix.data)).subarray(0, 8).equals(disc),
+  );
+  if (checkouts.length !== 1) throw new Error("Transaction is not a single HodlPay checkout");
+  const ix = checkouts[0];
+  if (ix.accounts[CHECKOUT_MERCHANT]?.toBase58() !== DEPLOYMENT.tempoBridge) {
+    throw new Error("Checkout did not pay the Tempo bridge");
+  }
+  const loan = await p.account.loan.fetch(ix.accounts[CHECKOUT_LOAN]);
+  if (loan.merchant.toBase58() !== DEPLOYMENT.tempoBridge) throw new Error("Checkout did not pay the Tempo bridge");
 
   const memo = tx.transaction.message.instructions
-    .filter((ix) => ix.programId.equals(MEMO_PROGRAM_ID) && "parsed" in ix)
-    .map((ix) => String((ix as { parsed: unknown }).parsed))
+    .filter((i) => i.programId.equals(MEMO_PROGRAM_ID) && "parsed" in i)
+    .map((i) => String((i as { parsed: unknown }).parsed))
     .find((m) => m.startsWith(TEMPO_MEMO_PREFIX));
   const merchant = memo?.slice(TEMPO_MEMO_PREFIX.length);
-  if (!merchant || !isAddress(merchant)) throw new Error("Checkout has no Tempo payout memo");
-  return { amount: received, merchant: getAddress(merchant) };
+  if (!merchant || !isAddress(merchant, { strict: false })) throw new Error("Checkout has no Tempo payout memo");
+  return { amount: fromUnits(loan.merchantReceived, 6), merchant: getAddress(merchant.toLowerCase()) };
 }
 
 const SETTLED = parseAbiItem(
@@ -68,8 +94,8 @@ export interface TempoSettlement {
   at: number;
 }
 
-/** Every settlement paid to `merchant` by the HodlPay contract, newest first. */
-export async function settlementsFor(merchant: Hex): Promise<TempoSettlement[]> {
+/** Settlements paid by the HodlPay contract matching the indexed filter, newest first. */
+async function settlements(args: { merchant?: Hex; checkoutRef?: Hex }): Promise<TempoSettlement[]> {
   const pub = createPublicClient({ chain: tempoModerato, transport: http(tempo.rpc) });
   const latest = await pub.getBlockNumber();
   const ranges: [bigint, bigint][] = [];
@@ -79,7 +105,7 @@ export async function settlementsFor(merchant: Hex): Promise<TempoSettlement[]> 
   }
   const chunks = await Promise.all(
     ranges.map(([fromBlock, toBlock]) =>
-      pub.getLogs({ address: tempo.settlement as Hex, event: SETTLED, args: { merchant }, fromBlock, toBlock }),
+      pub.getLogs({ address: tempo.settlement as Hex, event: SETTLED, args, fromBlock, toBlock }),
     ),
   );
   const logs = chunks.flat();
@@ -100,6 +126,9 @@ export async function settlementsFor(merchant: Hex): Promise<TempoSettlement[]> 
     .sort((a, b) => b.block - a.block);
 }
 
+/** Every settlement paid to `merchant` by the HodlPay contract, newest first. */
+export const settlementsFor = (merchant: Hex) => settlements({ merchant });
+
 export async function settleOnTempo(sig: string) {
   const { amount, merchant: to } = await bridgeReceipt(sig);
 
@@ -111,7 +140,9 @@ export async function settleOnTempo(sig: string) {
   const abi = tempo.abi as Abi;
 
   if (await pub.readContract({ address: tempo.settlement as Hex, abi, functionName: "settled", args: [checkoutRef] })) {
-    throw new Error("This checkout was already settled on Tempo");
+    const [done] = await settlements({ checkoutRef });
+    if (!done) throw new Error("This checkout was already settled on Tempo");
+    return { hash: done.hash, amount: done.amount, token: tempo.tokenSymbol, merchant: to, checkoutRef };
   }
   const hash = await wallet.writeContract({
     address: tempo.settlement as Hex,

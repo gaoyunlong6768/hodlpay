@@ -13,7 +13,19 @@ export const MERCHANTS: Record<string, PublicKey> = {
   Bluebottle: new PublicKey("72TGq9riSzsGkfiBP1Yutt3Cs6L9bmuAYjsSB2XBTpfQ"),
 };
 
-type LoanMeta = { merchant: string; item: string; rail: Rail; tempoTx?: string };
+export const CATALOG = [
+  { merchant: "Nomad Air", item: "SFO → Tokyo, one way", price: 860 },
+  { merchant: "Kinfolk Studio", item: "Walnut desk", price: 1240 },
+  { merchant: "Bluebottle", item: "Coffee subscription, 1 yr", price: 312 },
+];
+
+type LoanMeta = { merchant: string; item: string; rail: Rail; tempoSig?: string; tempoTx?: string };
+
+export interface PendingTempo {
+  loan: string;
+  merchant: string;
+  item: string;
+}
 
 export interface CheckoutInput {
   merchant: string;
@@ -49,6 +61,8 @@ export interface OnchainView {
   lpShares: number;
   lateFeeBps: number;
   gracePeriodDays: number;
+  /** Tempo-rail checkouts financed on Solana whose Tempo payout has not gone through yet. */
+  tempoPending: PendingTempo[];
 }
 
 /** A stress test moves the shared demo oracle, so it lapses on its own. */
@@ -98,7 +112,10 @@ export function useOnchain() {
 
   const [genesis, setGenesis] = useState<string | null>(null);
   useEffect(() => {
-    connection.getGenesisHash().then((g) => setGenesis(g.slice(0, 8))).catch(() => {});
+    connection
+      .getGenesisHash()
+      .then((g) => setGenesis(g.slice(0, 8)))
+      .catch(() => setGenesis(hp.DEPLOYMENT.cluster));
   }, [connection]);
   const scope = owner && genesis ? `hodlpay.${genesis}` : "";
   const eventsKey = scope ? `${scope}.events.${owner}` : "";
@@ -113,7 +130,9 @@ export function useOnchain() {
     [eventsKey],
   );
 
+  const refreshId = useRef(0);
   const refresh = useCallback(async () => {
+    const id = ++refreshId.current;
     if (!program || !publicKey || !scope) {
       setView(null);
       return;
@@ -153,6 +172,7 @@ export function useOnchain() {
       })
       .reverse();
 
+    if (id !== refreshId.current) return;
     setView({
       state: {
         now: Date.now(),
@@ -174,6 +194,9 @@ export function useOnchain() {
       lpShares: Number(lp?.value.uiAmount ?? 0),
       lateFeeBps: cfg.lateFeeBps,
       gracePeriodDays: cfg.gracePeriod / 86_400,
+      tempoPending: Object.entries(meta)
+        .filter(([, m]) => m.rail === "tempo" && m.tempoSig && !m.tempoTx)
+        .map(([loan, m]) => ({ loan, merchant: m.merchant, item: m.item })),
     });
   }, [program, publicKey, connection, metaKey, eventsKey, scope]);
 
@@ -200,17 +223,26 @@ export function useOnchain() {
   );
 
   useEffect(() => {
-    if (!owner) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!owner) {
+      setView(null);
+      setLastCheckout(null);
+      setError(null);
+      return;
+    }
     const tick = () => keeper().then(refresh).catch(() => refresh().catch(() => {}));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh().catch(() => {});
+    /* eslint-enable react-hooks/set-state-in-effect */
     tick();
     const t = setInterval(tick, 20_000);
     return () => clearInterval(t);
   }, [owner, keeper, refresh]);
 
+  const inFlight = useRef(false);
   const run = useCallback(
     async (label: string, fn: () => Promise<void>) => {
+      if (inFlight.current) return;
+      inFlight.current = true;
       setBusy(label);
       setError(null);
       try {
@@ -218,6 +250,7 @@ export function useOnchain() {
       } catch (e) {
         setError(errorMessage(e));
       } finally {
+        inFlight.current = false;
         setBusy(null);
         refresh().catch(() => {});
       }
@@ -231,6 +264,23 @@ export function useOnchain() {
       return program.provider.sendAndConfirm!(hp.tx(...ixs), [], { commitment: "confirmed" });
     },
     [program],
+  );
+
+  /** Relays a Tempo-rail checkout; safe to repeat, the settlement contract pays each checkout once. */
+  const settleTempo = useCallback(
+    async (loanAddress: string) => {
+      const meta = load<Record<string, LoanMeta>>(metaKey, {});
+      const m = meta[loanAddress];
+      if (!m?.tempoSig) throw new Error("No Tempo checkout recorded for this loan");
+      const res = await fetch("/api/tempo/settle", { method: "POST", body: JSON.stringify({ sig: m.tempoSig }) });
+      const body = await res.json();
+      if (!res.ok) throw new Error(`Financed on Solana, but the Tempo payout did not go through: ${body.error}`);
+      m.tempoTx = body.hash;
+      save(metaKey, meta);
+      log("checkout", `Relayed ${usd(body.amount)} to ${m.merchant} on Tempo (${body.token})`, body.hash);
+      return body.hash as string;
+    },
+    [metaKey, log],
   );
 
   const ensureFreshPrices = useCallback(async () => {
@@ -280,11 +330,10 @@ export function useOnchain() {
         const position = hp.pdas.position(publicKey!);
         const address = hp.pdas.loan(position, pos.loanCount).toBase58();
         const meta = load<Record<string, LoanMeta>>(metaKey, {});
-        meta[address] = { merchant: input.merchant, item: input.item, rail: input.rail };
+        meta[address] = { merchant: input.merchant, item: input.item, rail: input.rail, ...(tempo ? { tempoSig: sig } : {}) };
         save(metaKey, meta);
         const net = (await program!.account.loan.fetch(new PublicKey(address))).merchantReceived.toNumber() / 1e6;
         const result: CheckoutResult = { ...input, sig, loan: address, merchantReceived: net };
-        setLastCheckout(result);
         log(
           "checkout",
           input.rail === "tempo"
@@ -292,15 +341,14 @@ export function useOnchain() {
             : `Paid ${input.merchant} ${usd(net)} in USDC on Solana for ${input.item}; 4 × ${usd(input.price / 4)} scheduled`,
           sig,
         );
-        if (tempo) {
-          const res = await fetch("/api/tempo/settle", { method: "POST", body: JSON.stringify({ sig }) });
-          const body = await res.json();
-          if (!res.ok) throw new Error(`Solana checkout done, Tempo payout failed: ${body.error}`);
-          meta[address].tempoTx = body.hash;
-          save(metaKey, meta);
-          setLastCheckout({ ...result, tempoHash: body.hash });
-          log("checkout", `Relayed ${usd(net)} to ${input.merchant} on Tempo (${body.token})`, body.hash);
-        }
+        setLastCheckout(result);
+        if (tempo) setLastCheckout({ ...result, tempoHash: await settleTempo(address) });
+      }),
+
+    retryTempo: (loanAddress: string) =>
+      run("tempo", async () => {
+        const hash = await settleTempo(loanAddress);
+        setLastCheckout((c) => (c && c.loan === loanAddress ? { ...c, tempoHash: hash } : c));
       }),
 
     repay: (loanAddress: string) =>
@@ -332,9 +380,11 @@ export function useOnchain() {
     unlend: (amountUsd: number) =>
       run("lend", async () => {
         if (!view) return;
-        const shares = Math.min(view.lpShares, amountUsd / view.pool.sharePrice);
+        const all = amountUsd / view.pool.sharePrice >= view.lpShares;
+        const shares = all ? view.lpShares : amountUsd / view.pool.sharePrice;
         if (!(shares > 0)) throw new Error("You have no LP shares to redeem");
-        const sig = await send(await hp.buildLpWithdraw(program!, publicKey!, Math.floor(shares * 1e6) / 1e6));
+        const units = (all ? Math.round : Math.floor)(shares * 1e6) / 1e6;
+        const sig = await send(await hp.buildLpWithdraw(program!, publicKey!, units));
         log("withdraw", `Redeemed ${shares.toFixed(2)} LP shares (≈ ${usd(shares * view.pool.sharePrice)})`, sig);
       }),
 

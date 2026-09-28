@@ -98,7 +98,18 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, repay_amount: u64) -> Result<()
     p.debt -= repay;
     p.credit_balance += repay;
     ctx.accounts.asset.total_deposited -= seize;
-    ctx.accounts.config.total_debt = ctx.accounts.config.total_debt.saturating_sub(repay);
+    let config = &mut ctx.accounts.config;
+    config.total_debt = config.total_debt.saturating_sub(repay);
+
+    // No collateral left: write the shortfall off as pool bad debt so LP share
+    // price stops counting it. The written-off amount still settles the
+    // remaining installments through `credit_balance`, so the loans can close.
+    let bad_debt = if p.amounts.iter().all(|&a| a == 0) { p.debt } else { 0 };
+    if bad_debt > 0 {
+        config.total_debt = config.total_debt.saturating_sub(bad_debt);
+        p.credit_balance += bad_debt;
+        p.debt = 0;
+    }
 
     emit!(LiquidationEvent {
         owner: p.owner,
@@ -106,6 +117,7 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, repay_amount: u64) -> Result<()
         mint,
         repaid: repay,
         seized: seize,
+        bad_debt,
     });
     Ok(())
 }

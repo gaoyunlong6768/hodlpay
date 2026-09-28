@@ -129,7 +129,7 @@ Valuation, credit limits and liquidation thresholds are computed on-chain from t
 
 ### Tempo rail
 
-When a merchant wants settlement on Tempo, checkout pays the Tempo bridge account on Solana and attaches a memo `hodlpay:tempo:<evm address>`. The relayer (`/api/tempo/settle`) reads the confirmed Solana transaction, takes the amount from the bridge's USDC balance change and the merchant from the memo, then calls `HodlPaySettlement.settle` on Tempo. The contract pays the merchant with `transferWithMemo`, using `keccak256(solana signature)` as the memo, so every Tempo payment points back to its Solana checkout and cannot be settled twice.
+When a merchant wants settlement on Tempo, checkout pays the Tempo bridge account on Solana and attaches a memo `hodlpay:tempo:<evm address>`. The relayer (`/api/tempo/settle`) reads the confirmed Solana transaction, accepts it only if it holds exactly one HodlPay `checkout` whose merchant account is the bridge, takes the amount from the on-chain loan (`merchant_received`) and the merchant from the memo, then calls `HodlPaySettlement.settle` on Tempo. The contract pays the merchant with `transferWithMemo`, using `keccak256(solana signature)` as the memo, so every Tempo payment points back to its Solana checkout and cannot be settled twice.
 
 Testnet deployment (Moderato, chain 42431): contract `0x0a5cdea68a5acd2d070ba9a2e39299356408c402`, paying AlphaUSD.
 
@@ -195,7 +195,7 @@ cd protocol && solana program deploy target/deploy/hodlpay.so \
 cd ../app && HODLPAY_CLUSTER=devnet npm run bootstrap
 ```
 
-The release profile builds with `opt-level = "z"` (about 390 KB), so the deploy costs about 2 SOL in rent. Sizing the program account to the binary instead of the default headroom, and skipping the on-chain IDL (the app ships its own), keeps it there; `solana program extend` adds space for a larger upgrade later. On devnet the faucet gives each new wallet 0.03 SOL for fees; collateral for the demo is test zenZEC.
+The release profile builds with `opt-level = "z"` (about 390 KB), so the deploy costs about 2 SOL in rent. Sizing the program account to the binary instead of the default headroom, and skipping the on-chain IDL (the app ships its own), keeps it there; `solana program extend` adds space for a larger upgrade later (the loader requires at least 10240 bytes per extend). On devnet the faucet gives each new wallet 0.03 SOL for fees; collateral for the demo is test zenZEC.
 
 ### Environment
 
@@ -223,7 +223,10 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 | Tempo rail | A single relayer key settles on Tempo (see [Tempo rail](#tempo-rail)); the contract blocks double settlement but trusts the relayer for the amount. | Several co-signing relayers, then light-client or attestation verification. |
 | Collateral | Devnet uses test USDC and test zenZEC mints the admin can mint. | Real USDC and Zenrock zenZEC (`ZEC_MINT`), no mint authority. |
 | Demo operations | The site's faucet and keeper are paid by one devnet admin wallet; the faucet pauses below 1 SOL so price updates keep running. The stress test shifts the shared devnet oracle and reverts to live prices after 3 minutes. | Not applicable on mainnet (no faucet, no stress test). |
-| Credit risk | Installment plans are over-collateralized (max LTV 40–50%), there is no credit scoring, and a 1% late fee is the only penalty besides liquidation. | Tune tiers on live volatility data; add a reserve fund from part of the merchant fee. |
+| Credit risk | Installment plans are over-collateralized (max LTV 40–50%), there is no credit scoring, and a 1% late fee is the only penalty besides liquidation. A missed installment is not enforced on its own: it accrues the late fee when paid, but only the LTV can trigger a liquidation. | Tune tiers on live volatility data; add a reserve fund from part of the merchant fee; make a long-overdue installment liquidatable. |
+| Bad debt | If a crash seizes all collateral and debt remains, `liquidate` writes it off: the debt leaves the pool's books (`bad_debt` in the event) and the LP pool absorbs the loss. Liquidation proceeds already credited to the position still pay down later installments. | Reserve fund covers write-offs before LPs. |
+| LP pool | Merchant fees accrue to LP shares on checkout, so a deposit just before a large checkout captures part of its fee. The share price cannot be inflated by a first depositor because the pool is seeded at bootstrap. | Stream fees over the installment term; minimum-liquidity lock on new pools. |
+| Assets | Only classic SPL Token mints (not Token-2022) can be listed. | Token-2022 support when a listed asset needs it. |
 
 ## Roadmap
 

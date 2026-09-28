@@ -76,7 +76,7 @@ export function getShock(): number {
 export function parseShock(v: unknown): number | null {
   if (v === undefined || v === null) return 0;
   const s = Number(v);
-  return Number.isFinite(s) && s >= -0.9 && s <= 1 ? s : null;
+  return Number.isFinite(s) && s >= -0.7 && s <= 0.3 ? s : null;
 }
 
 export function setShock(shock: number) {

@@ -376,6 +376,50 @@ fn bnpl_lifecycle() {
 }
 
 #[test]
+fn underwater_position_writes_off_bad_debt() {
+    let mut env = setup();
+    let erin = new_user(&mut env, 10 * SOL, 0);
+    let merchant = Keypair::new();
+    let merchant_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&merchant.pubkey())
+        .send()
+        .unwrap();
+    let (sol, sol_ata) = (env.sol, erin.sol_ata);
+    move_collateral(&mut env, &erin, sol, sol_ata, 10 * SOL, false).unwrap();
+    let loan = checkout(&mut env, &erin, &merchant.pubkey(), merchant_usdc, 600 * USDC).unwrap();
+
+    // SOL gaps to $40: $400 of collateral against $600 of debt.
+    set_price(&mut env, sol, 40 * USDC);
+    let bob = new_user(&mut env, 0, 10_000 * USDC);
+    liquidate(&mut env, &bob, &erin, 300 * USDC).unwrap();
+    let p: Position = read(&env.svm, &erin.position);
+    assert_eq!(p.debt, 300 * USDC);
+    assert!(p.amounts[0] > 0);
+
+    // The second liquidation takes the last SOL; the $219.05 it cannot cover is written off.
+    liquidate(&mut env, &bob, &erin, 150 * USDC).unwrap();
+    let p: Position = read(&env.svm, &erin.position);
+    assert_eq!(p.amounts[0], 0);
+    assert_eq!(p.debt, 0);
+    assert_eq!(p.credit_balance, 600 * USDC);
+    let c: hodlpay::state::Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    assert_eq!(c.total_debt, 0);
+
+    // The loan still closes: every installment is settled from credit, with no cash and no late fee.
+    let mut clock: anchor_lang::prelude::Clock = env.svm.get_sysvar();
+    clock.unix_timestamp += 60 * DAY;
+    env.svm.set_sysvar(&clock);
+    for _ in 0..4 {
+        repay(&mut env, &erin, loan).unwrap();
+    }
+    let l: Loan = read(&env.svm, &loan);
+    assert_eq!(l.installments_paid, 4);
+    assert_eq!(l.late_fees_paid, 0);
+    let c: hodlpay::state::Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    assert_eq!(c.unearned_fees, 0);
+}
+
+#[test]
 fn zcash_collateral_adds_credit() {
     let mut env = setup();
     let carol = new_user(&mut env, 0, 0);

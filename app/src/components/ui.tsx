@@ -146,7 +146,7 @@ export function PriceTicker({
   shock: number;
 }) {
   return (
-    <div className="num flex items-center gap-4 border border-rule bg-paper-2/60 px-3 py-2 text-xs">
+    <div className="num flex flex-wrap items-center gap-x-4 gap-y-1 border border-rule bg-paper-2/60 px-3 py-2 text-xs">
       <span className="flex items-center gap-1.5">
         <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-mint" : "bg-amber"}`} />
         {label}

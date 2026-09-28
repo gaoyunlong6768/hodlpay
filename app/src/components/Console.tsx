@@ -6,7 +6,7 @@ import WalletProviders from "@/components/WalletProviders";
 import { Card, PriceTicker, Row, WalletBar } from "@/components/ui";
 import { DEPLOYMENT, TEMPO, explorerTx, tempoExplorerTx } from "@/lib/hodlpay";
 import { payPath } from "@/lib/paylink";
-import { MERCHANTS, useOnchain, type Balances, type OnchainView } from "@/lib/useOnchain";
+import { CATALOG, MERCHANTS, useOnchain, type Balances, type OnchainView } from "@/lib/useOnchain";
 import {
   ASSETS,
   PROTOCOL,
@@ -28,12 +28,6 @@ import {
 } from "@/lib/engine";
 
 const FALLBACK_PRICES: Record<AssetId, number> = { SOL: 120, zenZEC: 1500 };
-
-const CATALOG = [
-  { merchant: "Nomad Air", item: "SFO → Tokyo, one way", price: 860 },
-  { merchant: "Kinfolk Studio", item: "Walnut desk", price: 1240 },
-  { merchant: "Bluebottle", item: "Coffee subscription, 1 yr", price: 312 },
-];
 
 type PriceFeed = { source: string; prices: Record<AssetId, number>; at: number };
 type Mode = "chain" | "sim";
@@ -104,12 +98,30 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
           </span>
           <span className="text-ink">
             Repay {usd(m.debt - m.borrowLimit)} or lock about{" "}
-            {((m.debt - m.borrowLimit) / (state.prices.SOL * ASSETS.SOL.maxLtv)).toFixed(2)} more SOL to get back under
-            your max LTV.
+            {((m.debt - m.borrowLimit) / (state.prices.zenZEC * ASSETS.zenZEC.maxLtv)).toFixed(2)} more zenZEC to get back
+            under your max LTV.
             {m.status === "liquidatable" && " Until then the keeper may sell part of your collateral."}
           </span>
         </div>
       )}
+      {view?.tempoPending.map((p) => (
+        <div
+          key={p.loan}
+          className="lg:col-span-12 flex flex-wrap items-center gap-x-4 gap-y-1 border border-tempo bg-tempo/10 px-5 py-3 text-sm"
+        >
+          <span className="num text-xs font-medium uppercase tracking-widest text-tempo">Tempo payout pending</span>
+          <span className="text-ink">
+            {p.item} is financed on Solana; the {TEMPO.token} payout to {p.merchant} has not gone through yet.
+          </span>
+          <button
+            onClick={() => actions.retryTempo(p.loan)}
+            disabled={!!busy}
+            className="num ml-auto border border-tempo px-3 py-1.5 text-xs text-tempo transition hover:bg-tempo hover:text-paper disabled:opacity-40"
+          >
+            {busy === "tempo" ? "Relaying…" : "Retry payout"}
+          </button>
+        </div>
+      ))}
       <div className="lg:col-span-4">
         <Vault
           state={state}
@@ -133,7 +145,8 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
             await actions.checkout(input);
             setShowReceipt(true);
           })}
-          receipt={showReceipt ? (state.loans[0] ?? null) : null}
+          receipt={showReceipt ? (state.loans.find((l) => l.id === chain.lastCheckout?.loan) ?? null) : null}
+          receiptPending={!!view?.tempoPending.some((p) => p.loan === chain.lastCheckout?.loan)}
         />
       </div>
       <div className="lg:col-span-8">
@@ -149,8 +162,10 @@ function ChainConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
         <RiskDesk
           shock={shock}
           setShock={setShock}
+          committed={chain.shock}
           onCommit={(s) => actions.shock(s)}
           status={m.status}
+          underwater={m.ltv > 1 / (1 + PROTOCOL.liquidationBonus)}
           busy={busy === "shock" || busy === "liquidate"}
           onLiquidate={guard(actions.liquidate)}
           note="Moves the shared oracle price on this demo deployment; it snaps back to live prices after 3 minutes."
@@ -305,15 +320,6 @@ function SimConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
 
   const m = useMemo(() => metrics(state), [state]);
 
-  const run = (fn: (s: State) => State) => {
-    try {
-      setState(fn);
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
   const act = (fn: (s: State) => State) => {
     try {
       const next = fn(state);
@@ -342,7 +348,7 @@ function SimConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
       clearError={() => setError(null)}
     >
         <div className="lg:col-span-4">
-          <Vault state={state} onDeposit={(a, x) => run((s) => deposit(s, a, x))} onWithdraw={(a, x) => run((s) => withdraw(s, a, x))} />
+          <Vault state={state} onDeposit={(a, x) => act((s) => deposit(s, a, x))} onWithdraw={(a, x) => act((s) => withdraw(s, a, x))} />
         </div>
         <div className="lg:col-span-4">
           <CreditLine m={m} />
@@ -361,8 +367,8 @@ function SimConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
         <div className="lg:col-span-8">
           <Installments
             state={state}
-            onRepay={(id) => run((s) => repayNext(s, id))}
-            onAdvance={() => run((s) => advanceDays(s, PROTOCOL.installmentIntervalDays))}
+            onRepay={(id) => act((s) => repayNext(s, id))}
+            onAdvance={() => act((s) => advanceDays(s, PROTOCOL.installmentIntervalDays))}
           />
         </div>
         <div className="lg:col-span-4">
@@ -370,7 +376,7 @@ function SimConsole({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
             shock={shock}
             setShock={setShock}
             status={m.status}
-            onLiquidate={() => run(liquidate)}
+            onLiquidate={() => act(liquidate)}
           />
         </div>
 
@@ -436,7 +442,7 @@ function Vault({
       <label className="num mb-1 flex justify-between text-[11px] uppercase tracking-widest text-ink-soft">
         <span>Amount ({asset})</span>
         {balances && (
-          <button className="underline decoration-dotted" onClick={() => setAmount(String(Math.max(0, asset === "SOL" ? balances.SOL - 0.05 : balances[asset]).toFixed(4).replace(/\.?0+$/, "")))}>
+          <button className="underline decoration-dotted" onClick={() => setAmount(String(Math.floor(Math.max(0, asset === "SOL" ? balances.SOL - 0.05 : balances[asset]) * 1e4) / 1e4))}>
             wallet {balances[asset].toLocaleString("en-US", { maximumFractionDigits: 4 })}
           </button>
         )}
@@ -561,11 +567,14 @@ function Checkout({
   busy,
   onPay,
   receipt,
+  receiptPending,
 }: {
   available: number;
   busy?: boolean;
   onPay: (i: { merchant: string; item: string; price: number; rail: Rail }) => void;
   receipt: Loan | null;
+  /** The receipt's Tempo payout has not gone through yet. */
+  receiptPending?: boolean;
 }) {
   const [pick, setPick] = useState(0);
   const [rail, setRail] = useState<Rail>("solana");
@@ -638,15 +647,17 @@ function Checkout({
         Or pay through the merchant&apos;s hosted checkout link →
       </Link>
 
-      {receipt && <Receipt loan={receipt} />}
+      {receipt && <Receipt loan={receipt} pending={receiptPending} />}
     </Card>
   );
 }
 
-function Receipt({ loan }: { loan: Loan }) {
+function Receipt({ loan, pending }: { loan: Loan; pending?: boolean }) {
   return (
     <div key={loan.id} className="print receipt-edge mt-4 bg-paper-2 px-4 pb-3 pt-4 text-xs">
-      <p className="num text-center uppercase tracking-[0.3em]">Paid · {loan.rail === "solana" ? "Solana" : "Tempo"}</p>
+      <p className="num text-center uppercase tracking-[0.3em]">
+        {pending ? "Financed · Tempo payout pending" : `Paid · ${loan.rail === "solana" ? "Solana" : "Tempo"}`}
+      </p>
       <div className="dash my-2" />
       <Row k={loan.merchant} v={usd(loan.merchantReceived)} />
       <Row k="Collateral sold" v="0" />
@@ -767,22 +778,30 @@ function Installments({
 function RiskDesk({
   shock,
   setShock,
+  committed = 0,
   onCommit,
   status,
+  underwater,
   busy,
   onLiquidate,
   note,
 }: {
   shock: number;
   setShock: (n: number) => void;
+  /** Shock currently posted on-chain; releasing the slider on the same value posts nothing. */
+  committed?: number;
   /** Called when the user releases the slider; on-chain mode posts the shocked price. */
   onCommit?: (n: number) => void;
   status: ReturnType<typeof metrics>["status"];
+  /** Collateral is worth less than debt plus the liquidation bonus. */
+  underwater?: boolean;
   busy?: boolean;
   onLiquidate: () => void;
   note?: string;
 }) {
-  const commit = (n: number) => onCommit?.(n);
+  const commit = (n: number) => {
+    if (n !== committed) onCommit?.(n);
+  };
   return (
     <Card title="Risk desk" kicker="05 · stress test" className={status === "liquidatable" ? "outline outline-2 outline-vermilion" : ""}>
       <p className="text-sm text-ink-soft">
@@ -822,7 +841,9 @@ function RiskDesk({
       </div>
       <div className="dash my-4" />
       <p className="text-sm">
-        {status === "liquidatable"
+        {status === "liquidatable" && underwater
+          ? "Collateral is now worth less than the debt. The keeper still sells what it can; the rest stays on the installment plan, and the liquidity pool carries the risk if it goes unpaid."
+          : status === "liquidatable"
           ? "Debt is above the liquidation line. The keeper sells just enough collateral to restore max LTV."
           : status === "margin"
             ? "Margin alert sent. The user can top up or repay before any collateral is touched."

@@ -171,4 +171,6 @@ pub struct LiquidationEvent {
     pub mint: Pubkey,
     pub repaid: u64,
     pub seized: u64,
+    /// Debt written off because the position has no collateral left.
+    pub bad_debt: u64,
 }

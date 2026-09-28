@@ -83,9 +83,10 @@ function Pay({ r }: { r: PayRequest }) {
         r={r}
         result={lastCheckout}
         firstPaid={firstPaid}
-        busy={busy === "repay"}
+        busy={busy}
         error={chain.error}
         onPayFirst={() => actions.repay(lastCheckout.loan)}
+        onRetryTempo={() => actions.retryTempo(lastCheckout.loan)}
       />
     );
   }
@@ -226,31 +227,60 @@ function Paid({
   busy,
   error,
   onPayFirst,
+  onRetryTempo,
 }: {
   r: PayRequest;
   result: NonNullable<ReturnType<typeof useOnchain>["lastCheckout"]>;
   firstPaid: boolean;
-  busy: boolean;
+  busy: string | null;
   error: string | null;
   onPayFirst: () => void;
+  onRetryTempo: () => void;
 }) {
   const quarter = r.amount / PROTOCOL.installments;
+  const pending = r.rail === "tempo" && !result.tempoHash;
   return (
     <div className="print receipt receipt-edge px-6 pb-6 pt-7">
-      <p className="num text-center text-[11px] uppercase tracking-[0.35em] text-mint">Paid</p>
-      <p className="font-display mt-4 text-center text-4xl">Thanks. {r.merchant} has been paid.</p>
+      {pending ? (
+        <>
+          <p className="num text-center text-[11px] uppercase tracking-[0.35em] text-tempo">
+            {busy === "checkout" ? "Settling on Tempo" : "Tempo payout pending"}
+          </p>
+          <p className="font-display mt-4 text-center text-4xl">
+            {busy === "checkout" ? `Paying ${r.merchant} on Tempo…` : `Financed. ${r.merchant} has not been paid yet.`}
+          </p>
+          {busy !== "checkout" && (
+            <button
+              onClick={onRetryTempo}
+              disabled={!!busy}
+              className="mt-4 w-full bg-tempo px-3 py-2.5 text-sm font-medium text-paper transition disabled:opacity-40"
+            >
+              {busy === "tempo" ? "Relaying…" : `Retry ${TEMPO.token} payout`}
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="num text-center text-[11px] uppercase tracking-[0.35em] text-mint">Paid</p>
+          <p className="font-display mt-4 text-center text-4xl">Thanks. {r.merchant} has been paid.</p>
+        </>
+      )}
       <div className="dash my-5" />
-      <Row k={`${r.merchant} received`} v={`${usd(result.merchantReceived)} ${r.rail === "tempo" ? TEMPO.token : "USDC"}`} strong />
+      <Row
+        k={pending ? `${r.merchant} will receive` : `${r.merchant} received`}
+        v={`${usd(result.merchantReceived)} ${r.rail === "tempo" ? TEMPO.token : "USDC"}`}
+        strong
+      />
       <Row k="Collateral sold" v="0" />
       <Row k="First installment" v={firstPaid ? `${usd(quarter)} · paid` : `${usd(quarter)} · due today`} />
       <Row k="Then" v={`3 × ${usd(quarter)}, every ${PROTOCOL.installmentIntervalDays} days`} />
       {!firstPaid && (
         <button
           onClick={onPayFirst}
-          disabled={busy}
+          disabled={!!busy}
           className="mt-3 w-full border border-ink px-3 py-2.5 text-sm font-medium transition hover:bg-paper-2 disabled:opacity-40"
         >
-          {busy ? "Paying…" : `Pay first installment now (${usd(quarter)} USDC)`}
+          {busy === "repay" ? "Paying…" : `Pay first installment now (${usd(quarter)} USDC)`}
         </button>
       )}
       {error && <p className="num mt-2 text-[11px] text-vermilion">{error}</p>}

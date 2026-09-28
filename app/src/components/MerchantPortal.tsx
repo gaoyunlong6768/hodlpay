@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Card, Row } from "@/components/ui";
 import * as hp from "@/lib/hodlpay";
 import { usd, type Rail } from "@/lib/engine";
 import { isEvm, isSolana, payPath, type PayRequest } from "@/lib/paylink";
-import { MERCHANTS } from "@/lib/useOnchain";
+import { CATALOG, MERCHANTS } from "@/lib/useOnchain";
 
 interface Profile {
   name: string;
@@ -156,6 +156,15 @@ function ProfileCard({ profile, onChange }: { profile: Profile; onChange: (p: Pr
 function LinkBuilder({ profile }: { profile: Profile }) {
   const [item, setItem] = useState("Walnut desk");
   const [amount, setAmount] = useState("1240");
+  const [shownFor, setShownFor] = useState(profile.name);
+  if (shownFor !== profile.name) {
+    setShownFor(profile.name);
+    const demo = CATALOG.find((c) => c.merchant === profile.name);
+    if (demo) {
+      setItem(demo.item);
+      setAmount(String(demo.price));
+    }
+  }
   const [rail, setRail] = useState<Rail>("solana");
   const [origin, setOrigin] = useState("");
   const [qr, setQr] = useState("");
@@ -266,8 +275,11 @@ function Sales({ profile }: { profile: Profile }) {
   const [payouts, setPayouts] = useState<TempoPayout[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const id = ++requestId.current;
+    const current = () => id === requestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -277,6 +289,7 @@ function Sales({ profile }: { profile: Profile }) {
           (async () => {
             const p = hp.readonlyProgram();
             const loans = await p.account.loan.all([{ memcmp: { offset: 8 + 32 + 32, bytes: profile.solana } }]);
+            if (!current()) return;
             setSales(
               loans
                 .map(({ publicKey, account: l }) => ({
@@ -299,21 +312,24 @@ function Sales({ profile }: { profile: Profile }) {
             const res = await fetch(`/api/tempo/settlements?merchant=${profile.tempo}`);
             const body = await res.json();
             if (!res.ok) throw new Error(body.error);
-            setPayouts(body.settlements);
+            if (current()) setPayouts(body.settlements);
           })(),
         );
       } else setPayouts(null);
       await Promise.all(jobs);
     } catch (e) {
-      setError((e as Error).message);
+      if (current()) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }, [profile.solana, profile.tempo]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setSales(null);
+    setPayouts(null);
     load();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [load]);
 
   const totals = useMemo(() => {
@@ -327,7 +343,7 @@ function Sales({ profile }: { profile: Profile }) {
   return (
     <Card title="Sales" kicker="03 · settlements">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-        <div className="num grid grid-cols-3 gap-6 text-sm">
+        <div className="num grid grid-cols-2 gap-6 text-sm sm:grid-cols-3">
           <div>
             <p className="text-[11px] uppercase tracking-widest text-ink-soft">Orders</p>
             <p className="font-display text-3xl">{totals.orders}</p>

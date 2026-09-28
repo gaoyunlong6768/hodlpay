@@ -1708,6 +1708,13 @@ export type Hodlpay = {
           {
             "name": "seized",
             "type": "u64"
+          },
+          {
+            "name": "badDebt",
+            "docs": [
+              "Debt written off because the position has no collateral left."
+            ],
+            "type": "u64"
           }
         ]
       }

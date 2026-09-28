@@ -1702,6 +1702,13 @@
           {
             "name": "seized",
             "type": "u64"
+          },
+          {
+            "name": "bad_debt",
+            "docs": [
+              "Debt written off because the position has no collateral left."
+            ],
+            "type": "u64"
           }
         ]
       }

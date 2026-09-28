@@ -1,5 +1,6 @@
 import { adminProgram, liquidatePosition, parseShock, postPrices, scanPositions } from "@/lib/server/admin";
 import { fetchAssets } from "@/lib/hodlpay";
+import { errorResponse, jsonBody } from "@/lib/server/http";
 
 const REFRESH_AFTER_S = 45;
 
@@ -8,12 +9,13 @@ const REFRESH_AFTER_S = 45;
  * without a separate keeper process: refreshes stale oracle prices (at the
  * caller's stress-test `shock`, if any) and, when `liquidate` is set,
  * liquidates `owner`'s position if it is past its liquidation threshold.
- * Other visitors' positions are left alone so one demo cannot liquidate another.
+ * A pass never sweeps every liquidatable position, so one visitor's stress test
+ * does not liquidate other demos. (On-chain, liquidation stays permissionless.)
  */
 export async function POST(request: Request) {
-  const { force, liquidate, owner, shock } = await request.json().catch(() => ({}));
+  const { force, liquidate, owner, shock } = await jsonBody(request);
   const s = parseShock(shock);
-  if (s === null) return Response.json({ error: "shock must be between -0.9 and 1" }, { status: 400 });
+  if (s === null) return Response.json({ error: "shock must be between -0.7 and 0.3" }, { status: 400 });
   try {
     const { program } = adminProgram();
     const assets = await fetchAssets(program);
@@ -32,6 +34,6 @@ export async function POST(request: Request) {
     }
     return Response.json({ posted, liquidations });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 500 });
+    return errorResponse(e);
   }
 }

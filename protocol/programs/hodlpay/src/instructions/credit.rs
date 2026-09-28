@@ -150,10 +150,11 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     let due = ctx.accounts.loan.next_installment()?;
     let now = Clock::get()?.unix_timestamp;
     let late = now > ctx.accounts.loan.next_due_at + ctx.accounts.config.grace_period;
-    let late_fee = if late { apply_bps(due, ctx.accounts.config.late_fee_bps) } else { 0 };
     let p = &mut ctx.accounts.position;
     let from_credit = due.min(p.credit_balance);
     let cash = due - from_credit;
+    // Only the part the borrower still owes in cash can be late.
+    let late_fee = if late { apply_bps(cash, ctx.accounts.config.late_fee_bps) } else { 0 };
 
     if cash + late_fee > 0 {
         token::transfer(
