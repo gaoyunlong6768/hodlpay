@@ -79,12 +79,9 @@ async function main() {
     );
     const s = await settleOnTempo(tempoSig);
     console.log(`✓ tempo rail: ${s.amount} ${s.token} paid to ${s.merchant} on Tempo (${s.hash.slice(0, 18)}…)`);
-    const replay = await settleOnTempo(tempoSig).then(
-      () => "SETTLED TWICE",
-      (e: Error) => e.message,
-    );
-    if (replay === "SETTLED TWICE") throw new Error("Tempo replay protection failed");
-    console.log(`✓ tempo replay rejected: ${replay}`);
+    const replay = await settleOnTempo(tempoSig);
+    if (replay.hash !== s.hash) throw new Error(`Tempo replay paid again (${replay.hash})`);
+    console.log(`✓ tempo replay returned the original settlement, no second payment`);
   }
 
   setShock(-0.6);
