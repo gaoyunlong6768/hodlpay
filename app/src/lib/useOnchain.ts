@@ -430,6 +430,19 @@ export function useOnchain() {
         log("repay", `Repaid an installment on ${loan?.item ?? "loan"}`, sig);
       }),
 
+    repayMany: (loanAddresses: string[]) =>
+      run("repay", async () => {
+        const ro = hp.readonlyProgram(connection);
+        const ixs = (
+          await Promise.all(
+            loanAddresses.map(async (a) => hp.buildRepay(program!, publicKey!, (await ro.account.loan.fetch(new PublicKey(a))).index)),
+          )
+        ).flat();
+        const sig = await send(ixs);
+        const n = loanAddresses.length;
+        log("repay", `Repaid ${n} overdue installment${n > 1 ? "s" : ""} before collection`, sig);
+      }),
+
     payOff: (loanAddress: string) =>
       run("repay", async () => {
         const loan = view?.state.loans.find((l) => l.id === loanAddress);

@@ -140,6 +140,16 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
           </span>
         </div>
       )}
+      {view && (
+        <OverdueBanner
+          state={state}
+          creditBalance={view.creditBalance}
+          graceDays={view.gracePeriodDays}
+          lateFeePct={view.lateFeeBps / 100}
+          busy={busy === "repay"}
+          onRepay={guard(actions.repayMany)}
+        />
+      )}
       {view?.tempoPending.map((p) => (
         <div
           key={p.loan}
@@ -774,8 +784,80 @@ function Receipt({ loan, pending }: { loan: Loan; pending?: boolean }) {
   );
 }
 
-function nextDue(l: State["loans"][number]) {
+function nextDue(l: Loan) {
   return l.installments.find((i) => i.paidAt === null)?.dueAt ?? Infinity;
+}
+
+/** Liquidation credit pays the next installments first, earliest due first (repay and collect_overdue). */
+function creditCoverage(loans: Loan[], creditBalance: number) {
+  const covered = new Map<string, number>();
+  let credit = creditBalance;
+  for (const l of [...loans].sort((a, b) => nextDue(a) - nextDue(b))) {
+    const next = l.installments.find((i) => i.paidAt === null);
+    if (!next || credit <= 0.005) continue;
+    const c = Math.min(credit, next.amount);
+    covered.set(l.id, c);
+    credit -= c;
+  }
+  return covered;
+}
+
+const DAY_MS = 86_400_000;
+
+function OverdueBanner({
+  state,
+  creditBalance,
+  graceDays,
+  lateFeePct,
+  busy,
+  onRepay,
+}: {
+  state: State;
+  creditBalance: number;
+  graceDays: number;
+  lateFeePct: number;
+  busy?: boolean;
+  onRepay: (loans: string[]) => void;
+}) {
+  const covered = creditCoverage(state.loans, creditBalance);
+  const overdue = state.loans.flatMap((l) => {
+    const next = l.installments.find((i) => i.paidAt === null);
+    const cash = next ? next.amount - (covered.get(l.id) ?? 0) : 0;
+    return next && cash > 0.005 && next.dueAt < state.now - DAY_MS
+      ? [{ id: l.id, cash, collectAt: next.dueAt + graceDays * DAY_MS }]
+      : [];
+  });
+  if (!overdue.length) return null;
+
+  const first = Math.min(...overdue.map((o) => o.collectAt));
+  const pastGrace = state.now >= first;
+  const total = overdue.reduce((s, o) => s + o.cash, 0);
+  const due = overdue.reduce((s, o) => s + o.cash * (state.now >= o.collectAt ? 1 + lateFeePct / 100 : 1), 0);
+  const left = Math.max(0, first - state.now);
+  const hours = Math.floor(left / 3_600_000);
+  const countdown = hours >= 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h` : `${hours}h ${Math.floor((left % 3_600_000) / 60_000)}m`;
+  const when = new Date(first).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const n = overdue.length;
+
+  return (
+    <div className="lg:col-span-12 flex flex-wrap items-center gap-x-4 gap-y-2 border border-vermilion bg-vermilion/10 px-5 py-3 text-sm">
+      <span className="num text-xs font-medium uppercase tracking-widest text-vermilion">
+        Overdue · {n} installment{n > 1 ? "s" : ""} · {usd(total)}
+      </span>
+      <span className="text-ink">
+        {pastGrace
+          ? `The ${graceDays}-day grace period has ended: the keeper collects ${n > 1 ? "them" : "it"} from your collateral with a ${lateFeePct}% late fee on its next hourly run.`
+          : `Repay by ${when} (in ${countdown}) or the keeper collects ${n > 1 ? "them" : "it"} from your collateral with a ${lateFeePct}% late fee.`}
+      </span>
+      <button
+        onClick={() => onRepay(overdue.map((o) => o.id))}
+        disabled={busy}
+        className="num ml-auto border border-vermilion px-3 py-1.5 text-xs text-vermilion transition hover:bg-vermilion hover:text-paper disabled:opacity-40"
+      >
+        {busy ? "Signing…" : `Repay ${usd(due)} now`}
+      </button>
+    </div>
+  );
 }
 
 function Installments({
@@ -798,16 +880,7 @@ function Installments({
   onPayOff?: (id: string) => void;
   onAdvance?: () => void;
 }) {
-  // Liquidation credit pays the next installments first, earliest due first (repay and collect_overdue).
-  const covered = new Map<string, number>();
-  let credit = creditBalance;
-  for (const l of [...state.loans].sort((a, b) => nextDue(a) - nextDue(b))) {
-    const next = l.installments.find((i) => i.paidAt === null);
-    if (!next || credit <= 0.005) continue;
-    const c = Math.min(credit, next.amount);
-    covered.set(l.id, c);
-    credit -= c;
-  }
+  const covered = creditCoverage(state.loans, creditBalance);
   return (
     <Card title="Installments" kicker="04 · repay">
       <div className="mb-3 flex items-center justify-between">
@@ -837,7 +910,7 @@ function Installments({
             const fromCredit = covered.get(l.id) ?? 0;
             const cash = next ? Math.max(0, next.amount - fromCredit) : 0;
             const prepaid = !!next && cash < 0.005;
-            const overdue = next && !prepaid && next.dueAt < state.now - 24 * 60 * 60 * 1000;
+            const overdue = next && !prepaid && next.dueAt < state.now - DAY_MS;
             const missed = overdueTerms && next && next.dueAt < state.now;
             const collectAt = next && overdueTerms ? next.dueAt + overdueTerms.graceDays * 86_400_000 : 0;
             return (
