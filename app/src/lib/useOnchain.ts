@@ -92,6 +92,24 @@ const load = <T,>(key: string, fallback: T): T => {
 };
 const save = (key: string, v: unknown) => localStorage.setItem(key, JSON.stringify(v));
 
+const collectionMessage = (installment: number, item: string, paid: number, lateFee: number, seized: number, asset?: AssetId) =>
+  `Installment #${installment} of ${item} was overdue: the keeper paid ${usd(paid)} + ${usd(lateFee)} late fee from your collateral (${seized.toFixed(4)} ${asset}, incl. 5% bonus)`;
+
+/** Adds collections made while this browser was away (e.g. by the hourly keeper) to the local ledger. */
+function withCollections(events: LedgerEvent[], collections: hp.OverdueCollection[], meta: Record<string, LoanMeta>): LedgerEvent[] {
+  const seen = new Set(events.map((e) => e.sig));
+  const extra = collections
+    .filter((c) => !seen.has(c.sig))
+    .map<LedgerEvent>((c) => ({
+      id: c.sig,
+      at: c.at,
+      kind: "liquidation",
+      message: collectionMessage(c.installment + 1, meta[c.loan]?.item ?? "a purchase", c.paid, c.lateFee, c.seized, c.asset),
+      sig: c.sig,
+    }));
+  return extra.length ? [...events, ...extra].sort((a, b) => b.at - a.at) : events;
+}
+
 function errorMessage(e: unknown): string {
   const err = e as { message?: string; logs?: string[]; transactionLogs?: string[] };
   const msg = err?.message ?? String(e);
@@ -168,6 +186,7 @@ export function useOnchain() {
       connection.getTokenAccountBalance(hp.ata(hp.pdas.lpMint(), publicKey)).catch(() => null),
     ]);
     const chainLoans = await hp.fetchLoans(program, publicKey, pos.loanCount);
+    const collections = await hp.fetchOverdueCollections(program, chainLoans).catch(() => []);
     const meta = load<Record<string, LoanMeta>>(metaKey, {});
 
     const loans: Loan[] = chainLoans
@@ -178,6 +197,7 @@ export function useOnchain() {
           dueAt: (l.createdAt + i * cfg.installmentInterval) * 1000,
           amount: i === l.installmentsTotal - 1 ? l.principal - l.installmentAmount * (l.installmentsTotal - 1) : l.installmentAmount,
           paidAt: i < l.installmentsPaid ? l.createdAt * 1000 : null,
+          collected: collections.find((c) => c.loan === l.address && c.installment === i),
         }));
         return {
           id: l.address,
@@ -203,7 +223,7 @@ export function useOnchain() {
         prices: { SOL: assets.SOL.price, zenZEC: assets.zenZEC.price },
         collateral: pos.collateral,
         loans,
-        events: load<LedgerEvent[]>(eventsKey, []),
+        events: withCollections(load<LedgerEvent[]>(eventsKey, []), collections, meta),
         marginAlerted: false,
       },
       debt: pos.debt,
@@ -247,11 +267,7 @@ export function useOnchain() {
       for (const c of r.collections ?? []) {
         if (c.owner !== owner || !c.sig) continue;
         const item = meta[c.loan]?.item ?? "a purchase";
-        log(
-          "liquidation",
-          `Installment #${c.installment} of ${item} was overdue: the keeper paid ${usd(c.paid ?? 0)} + ${usd(c.lateFee ?? 0)} late fee from your collateral (${(c.seized ?? 0).toFixed(4)} ${c.asset}, incl. 5% bonus)`,
-          c.sig,
-        );
+        log("liquidation", collectionMessage(c.installment, item, c.paid ?? 0, c.lateFee ?? 0, c.seized ?? 0, c.asset), c.sig);
       }
       return r;
     },

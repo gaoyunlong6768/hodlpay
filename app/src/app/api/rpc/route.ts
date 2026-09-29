@@ -16,6 +16,7 @@ const ALLOWED = new Set([
   "getSlot",
   "getEpochInfo",
   "getSignatureStatuses",
+  "getSignaturesForAddress",
   "getTransaction",
   "getFeeForMessage",
   "getMinimumBalanceForRentExemption",

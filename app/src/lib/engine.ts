@@ -47,6 +47,8 @@ export interface Installment {
   dueAt: number;
   amount: number;
   paidAt: number | null;
+  /** Set when the installment was left unpaid and collected from collateral (on-chain mode). */
+  collected?: { paid: number; lateFee: number; seized: number; asset: AssetId; sig: string; at: number };
 }
 
 export interface Loan {

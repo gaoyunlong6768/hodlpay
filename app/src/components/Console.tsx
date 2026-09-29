@@ -853,9 +853,11 @@ function Installments({
                   {l.installments.map((i) => (
                     <span
                       key={i.index}
-                      title={usd(i.amount)}
+                      title={i.collected ? `${usd(i.amount)} · collected from collateral` : usd(i.amount)}
                       className={`h-3 w-7 border ${
-                        i.paidAt !== null
+                        i.collected
+                          ? "border-vermilion bg-vermilion"
+                          : i.paidAt !== null
                           ? "border-mint bg-mint"
                           : next && i.index === next.index && overdue
                             ? "border-vermilion"
@@ -887,10 +889,28 @@ function Installments({
                       title="Repay every remaining installment now, no interest"
                       className="border border-ink px-3 py-2 text-xs transition hover:bg-paper-2 disabled:opacity-40"
                     >
-                      Pay off {usd(left)}
+                      Pay off {usd(Math.max(0, left - creditBalance))}
                     </button>
                   )}
                 </div>
+                {l.installments.map(
+                  (i) =>
+                    i.collected && (
+                      <p key={`c${i.index}`} className="num basis-full text-[11px] text-ink-soft">
+                        <span className="text-vermilion">
+                          Installment {i.index + 1} collected from collateral
+                          {i.collected.at > 0 &&
+                            ` on ${new Date(i.collected.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                        </span>
+                        : {usd(i.collected.paid)} + {usd(i.collected.lateFee)} late fee,{" "}
+                        {i.collected.seized.toLocaleString("en-US", { maximumFractionDigits: 4 })} {i.collected.asset} taken
+                        (incl. 5% bonus) ·{" "}
+                        <a href={explorerTx(i.collected.sig)} target="_blank" rel="noreferrer" className="underline">
+                          tx
+                        </a>
+                      </p>
+                    ),
+                )}
                 {missed && overdueTerms && prepaid && (
                   <p className="basis-full text-[11px] text-mint">
                     Covered by your liquidation credit: settled from it with no late fee when you press the button, or by

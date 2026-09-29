@@ -1,4 +1,4 @@
-import { AnchorProvider, BN, Program, type Wallet } from "@anchor-lang/core";
+import { AnchorProvider, BN, BorshCoder, Program, type Wallet } from "@anchor-lang/core";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   NATIVE_MINT,
@@ -537,4 +537,75 @@ export async function fetchLoans(p: HodlpayProgram, owner: PublicKey, count: num
         ]
       : [],
   );
+}
+
+export interface OverdueCollection {
+  loan: string;
+  /** Zero-based index of the installment that was collected. */
+  installment: number;
+  paid: number;
+  lateFee: number;
+  fromCredit: number;
+  seized: number;
+  asset: CollateralId;
+  sig: string;
+  at: number;
+}
+
+const collectionCache = new Map<string, { lateFeesPaid: number; list: OverdueCollection[] }>();
+
+/**
+ * Installments collected from collateral (`OverdueCollectedEvent`), read from each loan's
+ * transactions. Only loans that paid a late fee can have one, and results are cached until
+ * the loan's late fees change, so this costs nothing on a normal refresh.
+ */
+export async function fetchOverdueCollections(p: HodlpayProgram, loans: ChainLoan[]): Promise<OverdueCollection[]> {
+  const conn = p.provider.connection;
+  const coder = new BorshCoder(p.idl);
+  const pid = p.programId.toBase58();
+  const out: OverdueCollection[] = [];
+  for (const l of loans) {
+    if (l.lateFeesPaid <= 0) continue;
+    const cached = collectionCache.get(l.address);
+    if (cached && cached.lateFeesPaid === l.lateFeesPaid) {
+      out.push(...cached.list);
+      continue;
+    }
+    const sigs = (await conn.getSignaturesForAddress(new PublicKey(l.address), { limit: 20 }, "confirmed")).filter((s) => !s.err);
+    const txs = await conn.getTransactions(
+      sigs.map((s) => s.signature),
+      { maxSupportedTransactionVersion: 0, commitment: "confirmed" },
+    );
+    const list: OverdueCollection[] = [];
+    txs.forEach((tx, i) => {
+      // Only decode events our program emitted, not log lines printed by other programs in the transaction.
+      const stack: string[] = [];
+      for (const line of tx?.meta?.logMessages ?? []) {
+        let m: RegExpExecArray | null;
+        if ((m = /^Program (\w+) invoke \[\d+\]$/.exec(line))) stack.push(m[1]);
+        else if (/^Program \w+ (success|failed)/.test(line)) stack.pop();
+        else if ((m = /^Program data: (.+)$/.exec(line)) && stack.at(-1) === pid) {
+          const e = coder.events.decode(m[1]);
+          if (e?.name !== "overdueCollectedEvent") continue;
+          const d = e.data as { loan: PublicKey; mint: PublicKey; installment: number; paid: BN; fromCredit: BN; lateFee: BN; seized: BN };
+          if (d.loan.toBase58() !== l.address) continue;
+          const asset = (Object.keys(MINTS) as CollateralId[]).find((id) => MINTS[id].mint.equals(d.mint)) ?? "zenZEC";
+          list.push({
+            loan: l.address,
+            installment: d.installment - 1,
+            paid: fromUnits(d.paid, USDC_DECIMALS),
+            lateFee: fromUnits(d.lateFee, USDC_DECIMALS),
+            fromCredit: fromUnits(d.fromCredit, USDC_DECIMALS),
+            seized: fromUnits(d.seized, MINTS[asset].decimals),
+            asset,
+            sig: sigs[i].signature,
+            at: (sigs[i].blockTime ?? 0) * 1000,
+          });
+        }
+      }
+    });
+    collectionCache.set(l.address, { lateFeesPaid: l.lateFeesPaid, list });
+    out.push(...list);
+  }
+  return out;
 }
