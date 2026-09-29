@@ -789,6 +789,9 @@ function Checkout({
       >
         Or pay through the merchant&apos;s hosted checkout link →
       </Link>
+      <Link href="/scan" className="num ml-3 mt-1 inline-block text-[11px] underline decoration-dotted">
+        Or scan any Solana Pay QR →
+      </Link>
 
       {receipt && <Receipt loan={receipt} pending={receiptPending} />}
     </Card>

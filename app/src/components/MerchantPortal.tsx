@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import { Card, Row, Skel } from "@/components/ui";
 import * as hp from "@/lib/hodlpay";
 import { PROTOCOL, usd, type Rail } from "@/lib/engine";
 import { isEvm, isSolana, payPath, type PayRequest } from "@/lib/paylink";
+import { encodeSolanaPay } from "@/lib/solanapay";
 import { CATALOG, MERCHANTS } from "@/lib/useOnchain";
 
 interface Profile {
@@ -78,6 +80,9 @@ export default function MerchantPortal() {
         </div>
         <div className="lg:col-span-8">
           <LinkBuilder profile={profile} />
+        </div>
+        <div className="lg:col-span-12">
+          <SolanaPayPos profile={profile} />
         </div>
         <div className="lg:col-span-12">
           <Sales profile={profile} />
@@ -226,7 +231,7 @@ function LinkBuilder({ profile }: { profile: Profile }) {
           {valid && (
             <div className="dash pt-2">
               <Row k="Shopper pays" v={`${usd(x / 4)} today, then 3 × ${usd(x / 4)}`} />
-              <Row k="You receive now" v={usd(x * 0.97)} strong />
+              <Row k="You receive now" v={usd(x * (1 - PROTOCOL.merchantFeeBps / 10_000))} strong />
             </div>
           )}
         </div>
@@ -266,6 +271,135 @@ function LinkBuilder({ profile }: { profile: Profile }) {
           </div>
         </div>
       )}
+    </Card>
+  );
+}
+
+type PosSale = { url: string; reference: PublicKey; amount: string; paid?: { sig: string; payer: string }; error?: string };
+
+/**
+ * A plain Solana Pay point of sale with no HodlPay code in it: it shows a standard USDC transfer request and
+ * confirms payment with `@solana/pay`'s own `findReference` + `validateTransfer`.
+ */
+function SolanaPayPos({ profile }: { profile: Profile }) {
+  const [amount, setAmount] = useState("42.50");
+  const [message, setMessage] = useState("Counter order");
+  const [sale, setSale] = useState<PosSale | null>(null);
+  const [qr, setQr] = useState("");
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const x = Math.round(Number(amount) * 100) / 100;
+  const ok = isSolana(profile.solana) && Number.isFinite(x) && x >= 1;
+
+  const start = () => {
+    const reference = Keypair.generate().publicKey;
+    const url = encodeSolanaPay({
+      recipient: new PublicKey(profile.solana),
+      amount: x,
+      reference: [reference],
+      label: profile.name || "Merchant",
+      message: message.trim() || undefined,
+    });
+    setSale({ url, reference, amount: String(x) });
+    QRCode.toDataURL(url, { margin: 1, width: 240, color: { dark: "#16140f", light: "#fbf8f1" } })
+      .then(setQr)
+      .catch(() => setQr(""));
+  };
+
+  const waiting = sale && !sale.paid && !sale.error ? sale : null;
+  useEffect(() => {
+    if (!waiting) return;
+    let stopped = false;
+    const poll = async () => {
+      const { findReference, validateTransfer, FindReferenceError } = await import("@solana/pay");
+      const { default: BigNumber } = await import("bignumber.js");
+      const conn = hp.connection();
+      while (!stopped) {
+        try {
+          const { signature } = await findReference(conn, waiting.reference, { finality: "confirmed" });
+          const tx = await validateTransfer(
+            conn,
+            signature,
+            { recipient: new PublicKey(profile.solana), amount: new BigNumber(waiting.amount), splToken: hp.USDC_MINT, reference: waiting.reference },
+            { commitment: "confirmed" },
+          );
+          const payer = tx.transaction.message.accountKeys[0].toBase58();
+          if (!stopped) setSale((s) => (s === waiting ? { ...s, paid: { sig: signature, payer } } : s));
+          return;
+        } catch (e) {
+          if (!(e instanceof FindReferenceError)) {
+            if (!stopped) setSale((s) => (s === waiting ? { ...s, error: (e as Error).message } : s));
+            return;
+          }
+        }
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    };
+    poll();
+    return () => {
+      stopped = true;
+    };
+  }, [waiting, profile.solana]);
+
+  return (
+    <Card title="Solana Pay point of sale" kicker="03 · in store">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_auto]">
+        <div className="min-w-0 space-y-3">
+          <p className="text-sm text-ink-soft">
+            Already take Solana Pay? Nothing to integrate. This is a standard USDC transfer request: any wallet can pay it
+            in full, and HodlPay shoppers can scan it and pay in 4. You receive the full price, no fee; the check below
+            is Solana Pay&apos;s own <code className="num text-xs">validateTransfer</code>, not HodlPay code.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Amount (USDC)" value={amount} onChange={setAmount} valid={Number.isFinite(x) && x >= 1} />
+            <Field label="Message" value={message} onChange={setMessage} />
+          </div>
+          <button
+            onClick={start}
+            disabled={!ok}
+            className="w-full bg-ink px-3 py-2.5 text-sm font-medium text-paper transition hover:bg-mint disabled:bg-ink/30"
+          >
+            {sale ? "New sale" : "Show Solana Pay code"}
+          </button>
+          {!isSolana(profile.solana) && <p className="num text-[11px] text-vermilion">Add a valid Solana payout wallet first.</p>}
+          {sale && (
+            <div className="dash pt-3 text-sm">
+              {sale.paid ? (
+                <>
+                  <p className="num text-[11px] uppercase tracking-widest text-mint">Paid · verified by @solana/pay</p>
+                  <Row k="Received" v={`${usd(Number(sale.amount))} USDC`} strong />
+                  <Row k="From" v={short(sale.paid.payer)} />
+                  <a className="num text-xs underline decoration-dotted" href={hp.explorerTx(sale.paid.sig)} target="_blank" rel="noreferrer">
+                    {sale.paid.sig.slice(0, 20)}…
+                  </a>
+                </>
+              ) : sale.error ? (
+                <p className="num text-[11px] text-vermilion">Payment found but rejected: {sale.error}</p>
+              ) : (
+                <p className="num text-[11px] text-ink-soft">Waiting for payment… (reference {short(sale.reference.toBase58())})</p>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex w-full flex-col items-center gap-2 md:w-52">
+          {sale && qr ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qr} alt="Solana Pay QR code" className="h-48 w-48 border border-rule" />
+          ) : (
+            <div className="grid h-48 w-48 place-items-center border border-dashed border-rule text-xs text-ink-soft">Solana Pay QR</div>
+          )}
+          {sale && !sale.paid && origin && (
+            <a
+              href={`${origin}/pay?${new URLSearchParams({ sp: sale.url }).toString()}`}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full bg-ink px-3 py-2.5 text-center text-sm font-medium text-paper transition hover:bg-mint"
+            >
+              Pay it with HodlPay here
+            </a>
+          )}
+        </div>
+      </div>
     </Card>
   );
 }
@@ -342,7 +476,7 @@ function Sales({ profile }: { profile: Profile }) {
   const pending = loading && ((isSolana(profile.solana) && !sales) || (isEvm(profile.tempo) && !payouts));
 
   return (
-    <Card title="Sales" kicker="03 · settlements">
+    <Card title="Sales" kicker="04 · settlements">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div className="num grid grid-cols-2 gap-6 text-sm sm:grid-cols-3">
           <div>

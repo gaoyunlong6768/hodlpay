@@ -14,6 +14,9 @@ export default function SiteHeader() {
         <Link href="/#console" className="hover:text-ink">
           Console
         </Link>
+        <Link href="/scan" className="hover:text-ink">
+          Scan to pay
+        </Link>
         <Link href="/merchant" className="hover:text-ink">
           Merchants
         </Link>

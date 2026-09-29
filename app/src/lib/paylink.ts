@@ -1,5 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import type { Rail } from "@/lib/engine";
+import { parseSolanaPay } from "@/lib/solanapay";
 
 /** A merchant's payment request, carried in a `/pay` link. */
 export interface PayRequest {
@@ -15,6 +16,8 @@ export interface PayRequest {
   ref?: string;
   /** Where the shopper goes after paying. */
   back?: string;
+  /** Set when paying a merchant's own Solana Pay code: the raw `solana:` URL. */
+  solanaPay?: string;
 }
 
 const MAX_AMOUNT = 100_000;
@@ -28,6 +31,7 @@ const isSolana = (a: string) => {
 };
 
 export function payPath(r: PayRequest) {
+  if (r.solanaPay) return `/pay?${new URLSearchParams({ sp: r.solanaPay }).toString()}`;
   const q = new URLSearchParams({ merchant: r.merchant, item: r.item, amount: String(r.amount), rail: r.rail });
   if (r.rail === "solana" && r.to) q.set("to", r.to);
   if (r.rail === "tempo" && r.tempo) q.set("tempo", r.tempo);
@@ -41,6 +45,22 @@ export function parsePay(q: Record<string, string | string[] | undefined>): PayR
     const v = q[k];
     return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
   };
+  if (get("sp")) {
+    try {
+      const s = parseSolanaPay(get("sp"));
+      if (s.amount < 1 || s.amount > MAX_AMOUNT) return { error: `Amount must be between $1 and $${MAX_AMOUNT.toLocaleString()}.` };
+      return {
+        merchant: s.label?.slice(0, 60) || `${s.recipient.toBase58().slice(0, 4)}…${s.recipient.toBase58().slice(-4)}`,
+        item: s.message?.slice(0, 80) || "Solana Pay payment",
+        amount: s.amount,
+        rail: "solana",
+        to: s.recipient.toBase58(),
+        solanaPay: get("sp"),
+      };
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
+  }
   const amount = Number(get("amount"));
   const rail: Rail = get("rail") === "tempo" ? "tempo" : "solana";
   const r: PayRequest = {

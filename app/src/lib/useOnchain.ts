@@ -6,6 +6,7 @@ import { LAMPORTS_PER_SOL, PublicKey, type TransactionInstruction } from "@solan
 import * as hp from "@/lib/hodlpay";
 import type { AssetId, CreditRecord, Installment, LedgerEvent, Loan, Rail, State, EventKind } from "@/lib/engine";
 import { creditChange, usd } from "@/lib/engine";
+import { buildSolanaPayCheckout, parseSolanaPay, planTotal } from "@/lib/solanapay";
 
 export const MERCHANTS: Record<string, PublicKey> = {
   "Nomad Air": new PublicKey("DTs2qmbnMFp1aiokJi8pR7fFSpMQFBTJvK71x2kCiVm9"),
@@ -19,7 +20,7 @@ export const CATALOG = [
   { merchant: "Bluebottle", item: "Coffee subscription, 1 yr", price: 312 },
 ];
 
-type LoanMeta = { merchant: string; item: string; rail: Rail; tempoSig?: string; tempoTx?: string };
+type LoanMeta = { merchant: string; item: string; rail: Rail; tempoSig?: string; tempoTx?: string; solanaPay?: string };
 
 interface Collection {
   owner: string;
@@ -48,6 +49,8 @@ export interface CheckoutInput {
   payTo?: string;
   /** Tempo payout address for the Tempo rail; defaults to the demo merchant with this name. */
   tempoPayTo?: string;
+  /** A merchant's Solana Pay code (`solana:` URL), paid in full with the fee added to the shopper's plan. */
+  solanaPay?: string;
 }
 
 export interface CheckoutResult extends CheckoutInput {
@@ -391,6 +394,31 @@ export function useOnchain() {
         setLastCheckout(null);
         await ensureFreshPrices();
         const pos = await hp.fetchPosition(program!, publicKey!);
+        const cash = await connection
+          .getTokenAccountBalance(hp.ata(hp.USDC_MINT, publicKey!))
+          .then((b) => Number(b.value.uiAmount ?? 0))
+          .catch(() => 0);
+        const position = hp.pdas.position(publicKey!);
+        const address = hp.pdas.loan(position, pos.loanCount).toBase58();
+
+        if (input.solanaPay) {
+          const req = parseSolanaPay(input.solanaPay);
+          const { merchantFeeBps } = await hp.fetchConfig(program!);
+          const total = planTotal(req.amount, merchantFeeBps);
+          const firstPaid = cash + pos.creditBalance >= total / 4;
+          const { ixs } = await buildSolanaPayCheckout(program!, publicKey!, req, pos.loanCount, merchantFeeBps, firstPaid);
+          const sig = await send(ixs);
+          const meta = load<Record<string, LoanMeta>>(metaKey, {});
+          meta[address] = { merchant: input.merchant, item: input.item, rail: "solana", solanaPay: req.recipient.toBase58() };
+          save(metaKey, meta);
+          const plan = firstPaid
+            ? `you paid ${usd(total / 4)} today, 3 × ${usd(total / 4)} to go (plan incl. ${usd(total - req.amount)} fee)`
+            : `4 × ${usd(total / 4)} scheduled, first due today (plan incl. ${usd(total - req.amount)} fee)`;
+          log("checkout", `Paid ${input.merchant}'s Solana Pay code: ${usd(req.amount)} USDC in full for ${input.item}; ${plan}`, sig);
+          setLastCheckout({ ...input, price: total, sig, loan: address, merchantReceived: req.amount, firstPaid });
+          return;
+        }
+
         const tempo = input.rail === "tempo";
         if (tempo && !hp.DEPLOYMENT.tempoBridge) throw new Error("Tempo rail is not configured on this deployment");
         const tempoPayTo = input.tempoPayTo ?? hp.TEMPO.merchants[input.merchant];
@@ -399,16 +427,10 @@ export function useOnchain() {
         if (!tempo && !solanaPayTo) throw new Error("Merchant has no Solana payout wallet");
         const payee = tempo ? new PublicKey(hp.DEPLOYMENT.tempoBridge!) : solanaPayTo;
         const ixs = await hp.buildCheckout(program!, publicKey!, payee, input.price, pos.loanCount);
-        const cash = await connection
-          .getTokenAccountBalance(hp.ata(hp.USDC_MINT, publicKey!))
-          .then((b) => Number(b.value.uiAmount ?? 0))
-          .catch(() => 0);
         const firstPaid = cash + pos.creditBalance >= input.price / 4;
         if (firstPaid) ixs.push(...(await hp.buildRepay(program!, publicKey!, pos.loanCount)));
         if (tempo) ixs.push(hp.buildTempoMemo(tempoPayTo));
         const sig = await send(ixs);
-        const position = hp.pdas.position(publicKey!);
-        const address = hp.pdas.loan(position, pos.loanCount).toBase58();
         const meta = load<Record<string, LoanMeta>>(metaKey, {});
         meta[address] = { merchant: input.merchant, item: input.item, rail: input.rail, ...(tempo ? { tempoSig: sig } : {}) };
         save(metaKey, meta);

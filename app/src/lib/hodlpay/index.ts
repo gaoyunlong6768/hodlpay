@@ -243,7 +243,7 @@ export async function buildCheckout(
   p: HodlpayProgram,
   owner: PublicKey,
   merchant: PublicKey,
-  amountUsd: number,
+  amountUsd: number | BN,
   loanIndex: number,
 ) {
   const position = pdas.position(owner);
@@ -251,7 +251,7 @@ export async function buildCheckout(
   return [
     createAssociatedTokenAccountIdempotentInstruction(owner, merchantUsdc, merchant, USDC_MINT),
     await p.methods
-      .checkout(toUnits(amountUsd, USDC_DECIMALS))
+      .checkout(BN.isBN(amountUsd) ? amountUsd : toUnits(amountUsd, USDC_DECIMALS))
       .accountsPartial({
         owner,
         config: pdas.config(),
