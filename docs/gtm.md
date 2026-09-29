@@ -16,8 +16,8 @@ Start with purchases that are large enough to matter and paid online in stableco
 | --- | --- | --- |
 | Long-term SOL holders | Selling triggers tax and misses upside | Spend now, repay over 6 weeks, keep the SOL |
 | ZEC holders | Privacy asset with few places to spend it; the only Solana credit option (Kamino's ZEC market) is an interest-bearing loan | zenZEC collateral tier, spend without selling |
-| Emerging-market users | Thin credit files, real crypto balances | Credit sized by collateral, no credit check |
-| Merchants | BNPL lifts conversion but Klarna/Affirm do not serve crypto buyers | Paid upfront in USDC or Tempo stablecoins, zero price risk, same 3% fee range as BNPL |
+| Emerging-market users | Thin credit files, real crypto balances | Credit sized by collateral, no credit check; on-time repayments raise the limit and build an on-chain record |
+| Merchants | BNPL lifts conversion but Klarna/Affirm do not serve crypto buyers | Paid upfront in USDC or Tempo stablecoins, zero price risk, 1.5% fee: half of unsecured BNPL (Klarna, Affirm, Yumi Finance) because collateral removes default losses |
 
 ## Channels
 
@@ -30,9 +30,9 @@ Start with purchases that are large enough to matter and paid online in stableco
 
 | Line | Amount |
 | --- | --- |
-| Merchant fee (3%) | $30 |
-| Capital used | $970, amortizing over 42 days: equivalent to $970 for 21 days |
-| Gross yield on deployed capital | 30 / 970 × 365 / 21 ≈ 54% APR before late fees; realized pool APY = this × utilization |
+| Merchant fee (1.5%) | $15 |
+| Capital used | $985, amortizing over 42 days: equivalent to $985 for 21 days |
+| Gross yield on deployed capital | 15 / 985 × 365 / 21 ≈ 26% APR before late fees; realized pool APY = this × utilization |
 | Credit loss | near zero by design: overcollateralized, keeper liquidates before debt exceeds collateral |
 
 Protocol take rate (future): a share of the merchant fee (e.g. 20%) to the treasury, the rest to LPs.
@@ -52,4 +52,5 @@ Protocol take rate (future): a share of the merchant fee (e.g. 20%) to the treas
 - **Liquidity crunch**: withdrawals limited to idle liquidity; utilization shown in the pool; pool cap during beta.
 - **Regulation**: users borrow against their own assets with no interest in the base product; merchants receive stablecoins. KYC at checkout thresholds when we move to fiat-facing merchants.
 - **Oracle risk**: Pyth prices with a max age; every credit or liquidation action refuses stale prices.
+- **Unsecured crypto BNPL** (Yumi Finance): same pay-in-4 shape, opposite risk model. Yumi underwrites unsecured credit and prices defaults into a 3% fee; we lend only against collateral, need no personal data, collect missed payments from collateral and charge 1.5%. Yumi fits shoppers without crypto wealth, we fit holders who won't sell.
 - **Competition**: crypto cards (ether.fi Cash, Nexo) and checkout routers (Buydl on Kamino) already let holders spend against collateral, all as interest-bearing loans. Our edge is the BNPL model (merchant-funded, 0% for the shopper, fixed schedule) and the merchant side: payment links, a portal and settlement on Solana or Tempo. If a money market adds pay-in-4, our pool and risk engine can plug into its liquidity instead of competing with it.

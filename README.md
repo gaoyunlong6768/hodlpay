@@ -4,7 +4,7 @@
 
 **Spend your crypto. Keep your crypto.**
 
-HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash on Solana) as collateral and get a stablecoin credit line they can use at any checkout. The merchant is paid upfront in USDC on Solana or in stablecoins on Tempo; the user repays in 4 interest-free installments. No selling (so no capital-gains sale in most jurisdictions), no credit check.
+HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash on Solana) as collateral and get a stablecoin credit line they can use at any checkout. The merchant is paid upfront in USDC on Solana or in stablecoins on Tempo; the user repays in 4 interest-free installments. No selling (so no capital-gains sale in most jurisdictions), no credit check and no personal data: the collateral is the credit check, and every installment paid on time raises the credit limit on-chain.
 
 Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 
@@ -15,7 +15,7 @@ Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 1. Open the console and click **Use demo wallet**: a real devnet wallet created in your browser, no extension and no signing popups (its key stays in localStorage, so test funds only). Or click **Connect wallet** to use Phantom, Solflare or Backpack switched to devnet.
 2. Click **Get test funds**: 2,000 test USDC, 3 test zenZEC and a little SOL for fees.
 3. Lock zenZEC, buy the $860 flight and pick the settlement rail (USDC on Solana or stablecoins on Tempo).
-4. Repay an installment, then drag the Risk desk slider to -60% to trigger a margin alert and a keeper liquidation.
+4. Repay an installment (on-time repayments move the credit ladder in the Credit line card), then drag the Risk desk slider to -60% to trigger a margin alert and a keeper liquidation.
 
 Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchant](https://hodlpay.vercel.app/merchant). Every action is a real devnet transaction linked to the explorer.
 
@@ -34,7 +34,7 @@ Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchan
 ## How it works
 
 1. **Lock**: deposit SOL or zenZEC into an on-chain vault. Each asset has its own risk tier.
-2. **Pay**: at checkout the protocol pays the merchant from the liquidity pool, minus a 3% merchant fee. The merchant chooses the rail: USDC on Solana, or a TIP-20 stablecoin on Tempo.
+2. **Pay**: at checkout the protocol pays the merchant from the liquidity pool, minus a 1.5% merchant fee. The merchant chooses the rail: USDC on Solana, or a TIP-20 stablecoin on Tempo.
 3. **Repay**: 4 installments, 14 days apart, 0% interest for the user. The first is paid in the checkout transaction itself (if the wallet holds too little USDC, it stays due that day). Paying more than 3 days after a due date adds a 1% late fee on that installment.
 4. **Missed payment**: an installment still unpaid 3 days after its due date is collected from the borrower's collateral. `collect_overdue` is permissionless: the collector pays the installment plus the 1% late fee into the pool and receives collateral worth that amount plus the 5% bonus. The loan moves on to its next installment and the rest of the position is untouched, so a missed payment costs the borrower about 6% of one installment instead of a liquidation. The keeper runs it every hour.
 5. **Protect**: the keeper posts oracle prices and emits a margin alert first; only past the liquidation line can a liquidator repay part of the debt (max 50% per call) and take collateral at a 5% bonus. Repaid amounts are credited to the user's upcoming installments.
@@ -44,12 +44,23 @@ Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchan
 | SOL    | 50%     | 65%          | 75%         |
 | zenZEC | 40%     | 55%          | 65%         |
 
+### On-time credit ladder
+
+The collateral is the credit check; repayment history is the credit score. Each wallet has a `CreditProfile` PDA that `repay` updates:
+
+- Every $250 the borrower repays on time in USDC adds 2.5 points of max LTV, up to +10 points (level 4). On time means before the 3-day grace period ends; the first installment, paid at checkout, does not count.
+- The boost stops 5 points below the margin alert line: SOL goes from 50% to at most 60%, zenZEC from 40% to at most 50%.
+- A late payment, an overdue collection or a liquidation resets progress to level 0.
+- Levels raise the limit for new purchases and withdrawals only. Margin alerts, health checks and liquidation always use the base tiers, so a higher level never lets a position get closer to liquidation than it could before.
+
+So a loyal zenZEC holder needs 2 ZEC instead of 2.5 ZEC to buy the same thing, while the protocol still never lends without collateral. The history lives on-chain, keyed to the wallet, with no name or ID attached.
+
 ### Who earns what
 
 | Party     | Pays                          | Gets                                              |
 | --------- | ----------------------------- | ------------------------------------------------- |
 | Shopper   | 0% interest, late fee if late | Spending power without selling                    |
-| Merchant  | 3% fee                        | Full amount upfront in stablecoins, no price risk |
+| Merchant  | 1.5% fee                      | Full amount upfront in stablecoins, no price risk |
 | LP        | USDC into the pool            | Merchant fees + late fees, via LP share price     |
 
 The pool is value-accruing: `pool value = idle USDC in vault + outstanding debt − unearned merchant fees`. The merchant fee on a loan is earned installment by installment, so an LP cannot capture a fee by depositing right before a checkout and withdrawing right after. LP shares are an SPL mint owned by the program; depositing mints shares at the current share price, withdrawing burns them and is limited to idle liquidity.
@@ -67,15 +78,18 @@ Every asset stores its Pyth feed id. `refresh_price` is permissionless: anyone c
 
 Spending against crypto collateral already exists. What is different here is who pays and how the debt is shaped: HodlPay is BNPL, not a loan. The merchant pays a fee in exchange for a sale and upfront settlement, so the shopper pays 0% interest on a fixed 4-installment schedule.
 
-| | HodlPay | Buydl | ether.fi Cash (Borrow Mode) | Nexo Card (Credit Mode) | Klarna / Affirm |
-| --- | --- | --- | --- | --- | --- |
-| Shopper cost | 0% interest, late fee only | Kamino borrow rate | Variable Aave rate from day one | Credit-line rate by loyalty tier | 0% on pay-in-4 |
-| Who funds it | Merchant fee (3%) to an LP pool | Shopper interest to Kamino lenders | Shopper interest to Aave lenders | Shopper interest to Nexo | Merchant fee |
-| Repayment | 4 installments, 14 days apart | Open-ended loan | Open-ended, no schedule | Open-ended | 4 installments |
-| Collateral | SOL, zenZEC (per-asset risk tiers) | SOL | Vault assets (ETH, BTC, stables…) | Custodial deposit | None, credit check |
-| Merchant settlement | USDC on Solana or stablecoins on Tempo | USDC on Solana | Visa rails | Visa rails | Fiat, days later |
-| Custody | Non-custodial program | Non-custodial (Kamino) | Non-custodial (Safe) | Custodial | n/a |
+| | HodlPay | Yumi Finance | Buydl | ether.fi Cash (Borrow Mode) | Nexo Card (Credit Mode) | Klarna / Affirm |
+| --- | --- | --- | --- | --- | --- | --- |
+| Shopper cost | 0% interest, late fee only | 0% on pay-in-4 | Kamino borrow rate | Variable Aave rate from day one | Credit-line rate by loyalty tier | 0% on pay-in-4 |
+| Who funds it | Merchant fee (1.5%) to an LP pool | Merchant fee (3%) | Shopper interest to Kamino lenders | Shopper interest to Aave lenders | Shopper interest to Nexo | Merchant fee |
+| Repayment | 4 installments, 14 days apart | 4 installments | Open-ended loan | Open-ended, no schedule | Open-ended | 4 installments |
+| Approval | Collateral: SOL, zenZEC (per-asset risk tiers) | Unsecured, credit underwriting | SOL collateral | Vault assets (ETH, BTC, stables…) | Custodial deposit | Unsecured, credit check |
+| Missed payment | Collected from collateral after 3 days | Collections, default risk | Liquidation | Liquidation | Liquidation | Collections, default risk |
+| Credit limit grows with | On-time repayments, on-chain (up to +10 pts LTV) | Underwriting data | Collateral only | Collateral only | Loyalty tier | Credit history |
+| Merchant settlement | USDC on Solana or stablecoins on Tempo | Stablecoins on Solana | USDC on Solana | Visa rails | Visa rails | Fiat, days later |
+| Custody | Non-custodial program | n/a | Non-custodial (Kamino) | Non-custodial (Safe) | Custodial | n/a |
 
+- **Versus Yumi Finance** (on-chain pay-in-4, Cypherpunk DeFi track winner): Yumi underwrites first and hopes to be repaid, so it has to judge who is creditworthy and carry default losses. HodlPay lends safely first and then learns: every loan is backed by collateral, so approval needs no personal data and works for any holder anywhere, and a missed installment is collected from collateral instead of written off. With no default losses to price in, the merchant fee is half (1.5% instead of 3%), and on-time repayments lower the collateral a shopper needs over time. The two approaches serve different people: Yumi reaches shoppers without crypto wealth, HodlPay reaches holders who don't want to sell it.
 - **Versus crypto cards and borrow routers**: they are loans with the shopper paying interest for as long as the balance is open. HodlPay moves the cost to the merchant, which is how BNPL wins checkout share, and gives the shopper a fixed end date. The merchant also gets a sales channel: hosted payment links and a portal, not just a payment method.
 - **Versus Klarna and Affirm**: same economics for the merchant, but no credit check, so it serves crypto holders anywhere, and the merchant is paid in stablecoins in seconds instead of fiat in days.
 - **Chains and assets**: Tempo settlement for merchants who want payment-chain stablecoins, and zenZEC collateral so ZEC holders can pay at checkout, where today their only on-chain option on Solana is an interest-bearing loan (Kamino's ZEC market).
@@ -124,7 +138,7 @@ docs/       Go-to-market notes, pitch and demo video scripts
 
 | Group     | Instructions                                                   |
 | --------- | -------------------------------------------------------------- |
-| Admin     | `initialize`, `add_asset`, `update_price`, `set_keeper`        |
+| Admin     | `initialize`, `add_asset`, `update_price`, `set_keeper`, `set_merchant_fee` |
 | Oracle    | `refresh_price` (permissionless, Pyth)                         |
 | Liquidity | `deposit_liquidity`, `withdraw_liquidity`                      |
 | Position  | `open_position`, `deposit`, `withdraw`                         |
@@ -236,7 +250,7 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 | Tempo rail | Payouts need 2 of 3 attester signatures, each attester verifying the Solana checkout itself, under per-payout and daily caps, and `/audit` reconciles every payout (see [Tempo rail](#tempo-rail)). All three attester keys are run by HodlPay in this demo. | Independent attester operators and a multisig owner, then light-client or attestation-bridge verification. |
 | Collateral | Devnet uses test USDC and test zenZEC mints the admin can mint. | Real USDC and Zenrock zenZEC (`ZEC_MINT`), no mint authority. |
 | Demo operations | The site's faucet and keeper are paid by one devnet admin wallet; the faucet pauses below 1 SOL so price updates keep running. The stress test shifts the shared devnet oracle and reverts to live prices after 3 minutes. | Not applicable on mainnet (no faucet, no stress test). |
-| Credit risk | Installment plans are over-collateralized (max LTV 40–50%) and there is no credit scoring. A missed installment is collected from collateral 3 days after its due date (`collect_overdue`, 1% late fee plus the 5% collector bonus); if no single collateral asset can cover it, the position is left to regular liquidation. | Tune tiers on live volatility data; add a reserve fund from part of the merchant fee. |
+| Credit risk | Installment plans are over-collateralized (max LTV 40–50%, up to 50–60% for wallets with an on-time record, always at least 5 points under the margin alert). There is no off-chain credit scoring. A missed installment is collected from collateral 3 days after its due date (`collect_overdue`, 1% late fee plus the 5% collector bonus); if no single collateral asset can cover it, the position is left to regular liquidation. | Tune tiers on live volatility data; add a reserve fund from part of the merchant fee. |
 | Bad debt | If a crash seizes all collateral and debt remains, `liquidate` writes it off: the debt leaves the pool's books (`bad_debt` in the event) and the LP pool absorbs the loss. Liquidation proceeds already credited to the position still pay down later installments. | Reserve fund covers write-offs before LPs. |
 | LP pool | Merchant fees are earned installment by installment, so a deposit around a checkout captures none of its fee. The share price cannot be inflated by a first depositor because the pool is seeded at bootstrap. | Minimum-liquidity lock on new pools. |
 | Assets | Only classic SPL Token mints (not Token-2022) can be listed. | Token-2022 support when a listed asset needs it. |
@@ -244,7 +258,9 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 ## Roadmap
 
 - Mainnet with real USDC and zenZEC; drop keeper-posted prices once every asset has a sponsored Pyth feed
+- Pay any Solana Pay QR in 4: scan a merchant's existing Solana Pay code, HodlPay pays it in full and the shopper repays in 4, with no merchant integration
 - Merchant SDK (React button, webhooks on sale) and Solana Pay transaction requests
+- Portable credit record: let other protocols read `CreditProfile` (on-time volume, resets) as a privacy-preserving repayment history
 - Longer terms with interest for larger purchases
 - Tempo-native repayments and a direct Tempo liquidity pool
 
