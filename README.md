@@ -55,6 +55,20 @@ The collateral is the credit check; repayment history is the credit score. Each 
 
 So a loyal zenZEC holder needs 2 ZEC instead of 2.5 ZEC to buy the same thing, while the protocol still never lends without collateral. The history lives on-chain, keyed to the wallet, with no name or ID attached.
 
+### Credit without surveillance
+
+Unsecured pay-in-4 has to know who you are: it collects a name, date of birth, phone number and often bank data, runs a credit check, and increasingly reports each plan to credit bureaus. Collateral makes all of that unnecessary, so HodlPay never asks:
+
+| | Unsecured BNPL | HodlPay |
+| --- | --- | --- |
+| To get approved | Identity, phone, credit check | A wallet with collateral |
+| Who learns about the purchase | The lender, and often a credit bureau | Nobody beyond the chain: the program sees a wallet, never a person |
+| What the merchant learns about you | Name and contact data from the lender | A USDC payment from a wallet (on the Solana Pay path, not even that it was financed) |
+| Credit history | A bureau file tied to your legal identity | `CreditProfile` tied to a pseudonymous wallet; start a new wallet and you start fresh |
+| If you miss a payment | Collections and a bureau record | That installment is taken from your collateral; nothing leaves the chain |
+
+For ZEC holders this completes the picture: Zcash keeps what you hold private, and HodlPay lets you spend it without handing over who you are. The honest limit is that Solana is transparent: a wallet's collateral, loans and repayments are public, so the privacy is pseudonymity, not secrecy. Keep a dedicated wallet for HodlPay and fund it from shielded ZEC through Zenrock so it isn't linked to the rest of your history. Next steps: prove a credit level to other protocols without revealing the wallet (a zero-knowledge proof over `CreditProfile`), and shielded repayments from Zcash.
+
 ### Who earns what
 
 | Party     | Pays                          | Gets                                              |
@@ -274,7 +288,8 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 - Mainnet with real USDC and zenZEC; drop keeper-posted prices once every asset has a sponsored Pyth feed
 - Solana Pay transaction requests (merchant-built transactions) and mainnet USDC codes from wallets and point-of-sale apps
 - Merchant SDK (React button, webhooks on sale)
-- Portable credit record: let other protocols read `CreditProfile` (on-time volume, resets) as a privacy-preserving repayment history
+- Portable credit record: let other protocols check a `CreditProfile` level through a zero-knowledge proof, without learning the wallet
+- Shielded repayments straight from Zcash
 - Longer terms with interest for larger purchases
 - Tempo-native repayments and a direct Tempo liquidity pool
 

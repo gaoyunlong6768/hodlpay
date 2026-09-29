@@ -19,13 +19,13 @@ I have built both halves of this product. At Hengchang I led a Buy Now, Pay Late
 Why now: stablecoin payments finally work at checkout (fast, cheap settlement on Solana; Tempo is purpose-built for payments), on-chain oracles make real-time LTV management reliable, and ZEC is now usable as collateral on Solana. Yet holders still choose between selling (and paying tax) and an interest-bearing loan with no end date, from crypto cards or money markets. BNPL moved over $500B of purchases in 2025; crypto has the collateral, it lacks a merchant-funded checkout.
 
 ## Technologies (<=500)
-Solana: Anchor 1.x (Rust) program: vaults, credit line, installments, on-time credit ladder, overdue collection, liquidation, LP pool; SPL Token/USDC; Solana Pay; permissionless Pyth refresh; zenZEC; LiteSVM tests. Tempo: Solidity settlement (2-of-3 EIP-712 attesters, payout caps, TIP-20 transferWithMemo) on Moderato, viem; public audit page. App: Next.js, TypeScript, Wallet Adapter, Tailwind; payment links, merchant portal. Keeper: TypeScript + Vercel cron. Dev/AI: Cursor, Solana CLI, Anchor, solc.
+Solana: Anchor 1.x (Rust) program: vaults, credit line, installments, on-time credit ladder, overdue collection, liquidation, LP pool; SPL Token/USDC; Solana Pay; permissionless Pyth refresh; zenZEC; LiteSVM tests. Tempo: Solidity settlement (2-of-3 EIP-712 attesters, payout caps, TIP-20 transferWithMemo) on Moderato, viem; public audit page. App: Next.js, TypeScript, Wallet Adapter, Tailwind. Keeper: TypeScript + Vercel cron. Dev/AI: Cursor, Solana CLI, Anchor, solc.
 
 ## Chains
 Solana, Tempo, Zcash
 
 ## How does your product use these chains? (<=500)
-Solana: core protocol. Vaults, credit line, installments, liquidation and the LP pool are one Anchor program; merchants get USDC at checkout. Zcash: zenZEC (Zenrock's ZEC on Solana, tested against the real mint) is collateral with its own 40% LTV tier, so shielded ZEC holders spend without selling. Tempo: merchants can take Tempo stablecoins; 2 of 3 attesters verify the Solana checkout, our capped contract pays via transferWithMemo, and /audit reconciles every payout.
+Solana: core protocol. Vaults, credit line, installments, liquidation and the LP pool are one Anchor program; merchants get USDC at checkout. Zcash: zenZEC (Zenrock's ZEC on Solana, tested against the real mint) is collateral with its own 40% LTV tier: ZEC holders spend without selling or revealing who they are. Tempo: merchants can take Tempo stablecoins; 2 of 3 attesters verify the Solana checkout, our capped contract pays via transferWithMemo, and /audit reconciles every payout.
 
 ## Category
 Payments & Remittance
@@ -37,7 +37,7 @@ China
 gaobanxian
 
 ## Anything else judges should know? (<=500)
-Live on Solana devnet and Tempo Moderato; open source, LiteSVM tests, CI. Worth checking: /scan pays any Solana Pay QR in 4 and the merchant's POS validates it with @solana/pay; on-time repayments raise max LTV; missed installments are collected from collateral by a permissionless instruction (hourly keeper); /audit re-derives every Tempo payout from its Solana checkout. Honest limits: unaudited; we run all 3 Tempo attesters for now; the keeper can post stress-test prices; devnet uses test USDC and zenZEC (tests pass against the real zenZEC mint).
+Live on Solana devnet and Tempo Moderato; open source, LiteSVM tests, CI. Worth checking: /scan pays any Solana Pay QR in 4 and the merchant's POS validates it with @solana/pay; on-time repayments raise max LTV; missed installments are collected from collateral (hourly keeper); /audit re-derives every Tempo payout. Honest limits: unaudited; we run all 3 Tempo attesters; the keeper can post stress-test prices; devnet uses test USDC and zenZEC.
 
 ## Project website / Live product link
 https://hodlpay.vercel.app

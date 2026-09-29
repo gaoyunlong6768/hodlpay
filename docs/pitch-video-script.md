@@ -24,7 +24,7 @@
 
 **2:07 – 2:32 · Why now, why these chains** (architecture slide)
 
-"Stablecoin checkout finally works. Solana gives us instant, cheap settlement and Pyth prices for real-time risk. Tempo is built for payments, so merchants who want Tempo stablecoins get paid there: independent attesters verify each Solana checkout, and a public audit page ties every Tempo payment back to it. And with zenZEC, ZEC holders can pay at checkout instead of taking an interest-bearing loan."
+"Stablecoin checkout finally works. Solana gives us instant, cheap settlement and Pyth prices for real-time risk. Tempo is built for payments, so merchants who want Tempo stablecoins get paid there: independent attesters verify each Solana checkout, and a public audit page ties every Tempo payment back to it. And for ZEC holders: Zcash keeps what you hold private, and HodlPay lets you spend it without handing over who you are. No ID, no credit bureau, just collateral."
 
 **2:32 – 2:52 · Ask** (face to camera)
 
