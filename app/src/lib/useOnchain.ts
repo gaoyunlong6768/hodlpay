@@ -340,6 +340,11 @@ export function useOnchain() {
     deposit: (asset: AssetId, amount: number) =>
       run("deposit", async () => {
         if (!(amount > 0)) throw new Error("Amount must be positive");
+        const have = view?.balances[asset];
+        if (have !== undefined && amount > have + 1e-9) {
+          const shown = have.toLocaleString("en-US", { maximumFractionDigits: 4 });
+          throw new Error(`Your wallet holds ${shown} ${asset}. Lock less, or press Get test funds.`);
+        }
         const { exists } = await hp.fetchPosition(program!, publicKey!);
         const sig = await send(await hp.buildDeposit(program!, publicKey!, asset, amount, exists));
         log("deposit", `Locked ${amount} ${asset} in the HodlPay vault`, sig);

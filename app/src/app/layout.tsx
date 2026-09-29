@@ -21,10 +21,16 @@ const mono = IBM_Plex_Mono({
   subsets: ["latin"],
 });
 
+const title = "HodlPay · Spend your crypto. Keep your crypto.";
+const description =
+  "Crypto-backed Buy Now, Pay Later. Lock SOL or zenZEC, pay any merchant in stablecoins, repay in 4 installments.";
+
 export const metadata: Metadata = {
-  title: "HodlPay · Spend your crypto. Keep your crypto.",
-  description:
-    "Crypto-backed Buy Now, Pay Later. Lock SOL or zenZEC, pay any merchant in stablecoins, repay in 4 installments.",
+  metadataBase: new URL("https://hodlpay.vercel.app"),
+  title,
+  description,
+  openGraph: { title, description, siteName: "HodlPay", type: "website", url: "/" },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

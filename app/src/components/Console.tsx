@@ -774,6 +774,10 @@ function Receipt({ loan, pending }: { loan: Loan; pending?: boolean }) {
   );
 }
 
+function nextDue(l: State["loans"][number]) {
+  return l.installments.find((i) => i.paidAt === null)?.dueAt ?? Infinity;
+}
+
 function Installments({
   state,
   loading,
@@ -794,6 +798,16 @@ function Installments({
   onPayOff?: (id: string) => void;
   onAdvance?: () => void;
 }) {
+  // Liquidation credit pays the next installments first, earliest due first (repay and collect_overdue).
+  const covered = new Map<string, number>();
+  let credit = creditBalance;
+  for (const l of [...state.loans].sort((a, b) => nextDue(a) - nextDue(b))) {
+    const next = l.installments.find((i) => i.paidAt === null);
+    if (!next || credit <= 0.005) continue;
+    const c = Math.min(credit, next.amount);
+    covered.set(l.id, c);
+    credit -= c;
+  }
   return (
     <Card title="Installments" kicker="04 · repay">
       <div className="mb-3 flex items-center justify-between">
@@ -820,7 +834,10 @@ function Installments({
           {state.loans.map((l) => {
             const left = outstanding(l);
             const next = l.installments.find((i) => i.paidAt === null);
-            const overdue = next && next.dueAt < state.now - 24 * 60 * 60 * 1000;
+            const fromCredit = covered.get(l.id) ?? 0;
+            const cash = next ? Math.max(0, next.amount - fromCredit) : 0;
+            const prepaid = !!next && cash < 0.005;
+            const overdue = next && !prepaid && next.dueAt < state.now - 24 * 60 * 60 * 1000;
             const missed = overdueTerms && next && next.dueAt < state.now;
             const collectAt = next && overdueTerms ? next.dueAt + overdueTerms.graceDays * 86_400_000 : 0;
             return (
@@ -849,9 +866,9 @@ function Installments({
                 </div>
                 <div className="num w-28 text-right text-sm">
                   <span className="block">{usd(left)}</span>
-                  <span className={`block text-[11px] ${overdue ? "text-vermilion" : "text-ink-soft"}`}>
+                  <span className={`block text-[11px] ${overdue ? "text-vermilion" : prepaid ? "text-mint" : "text-ink-soft"}`}>
                     {next
-                      ? `${overdue ? "overdue" : "due"} ${new Date(next.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                      ? `${overdue ? "overdue" : "due"} ${new Date(next.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}${prepaid ? " · prepaid" : ""}`
                       : "paid off"}
                   </span>
                 </div>
@@ -861,7 +878,7 @@ function Installments({
                     onClick={() => onRepay(l.id)}
                     className="bg-ink px-3 py-2 text-xs font-medium text-paper transition hover:bg-mint disabled:bg-ink/20"
                   >
-                    {next ? `Repay ${usd(next.amount)}` : "Done"}
+                    {!next ? "Done" : prepaid ? "Settle from credit" : `Repay ${usd(cash)}`}
                   </button>
                   {onPayOff && next && l.installments.filter((i) => i.paidAt === null).length > 1 && (
                     <button
@@ -874,8 +891,19 @@ function Installments({
                     </button>
                   )}
                 </div>
-                {missed && overdueTerms && (
+                {missed && overdueTerms && prepaid && (
+                  <p className="basis-full text-[11px] text-mint">
+                    Covered by your liquidation credit: settled from it with no late fee when you press the button, or by
+                    the keeper{" "}
+                    {state.now < collectAt
+                      ? `on ${new Date(collectAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                      : "on its next hourly run"}
+                    . No collateral is taken.
+                  </p>
+                )}
+                {missed && overdueTerms && !prepaid && (
                   <p className="basis-full text-[11px] text-vermilion">
+                    {fromCredit > 0.005 && `${usd(fromCredit)} comes from your liquidation credit. `}
                     {state.now < collectAt
                       ? `Unpaid. If it is still unpaid on ${new Date(collectAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}, the keeper collects it from your collateral with a ${overdueTerms.lateFeePct}% late fee.`
                       : `Past the ${overdueTerms.graceDays}-day grace period: the keeper is collecting it from your collateral with a ${overdueTerms.lateFeePct}% late fee.`}

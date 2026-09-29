@@ -32,7 +32,7 @@ import tempo from "@/lib/hodlpay/tempo.json";
 const STATE_DIR = process.env.HODLPAY_STATE_DIR ?? path.join(process.cwd(), ".hodlpay");
 
 function stateFile<T>(name: string, what: string): T {
-  const f = path.join(STATE_DIR, name);
+  const f = path.join(/*turbopackIgnore: true*/ STATE_DIR, name);
   if (!existsSync(/*turbopackIgnore: true*/ f)) throw new Error(`${what} missing: run scripts/tempo-deploy.ts`);
   return JSON.parse(readFileSync(/*turbopackIgnore: true*/ f, "utf8"));
 }
