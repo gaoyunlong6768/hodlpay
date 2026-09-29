@@ -90,6 +90,7 @@ export const pdas = {
     b.writeUInt32LE(index);
     return pda([seed("loan"), position.toBuffer(), b]);
   },
+  credit: (owner: PublicKey) => pda([seed("credit"), owner.toBuffer()]),
 };
 
 export const ata = (mint: PublicKey, owner: PublicKey) =>
@@ -206,6 +207,7 @@ export async function buildDeposit(
         vault: pdas.collateralVault(mint),
         userToken,
         tokenProgram: TOKEN_PROGRAM_ID,
+        credit: pdas.credit(owner),
       })
       .instruction(),
   );
@@ -228,6 +230,7 @@ export async function buildWithdraw(p: HodlpayProgram, owner: PublicKey, asset: 
         vault: pdas.collateralVault(mint),
         userToken,
         tokenProgram: TOKEN_PROGRAM_ID,
+        credit: pdas.credit(owner),
       })
       .remainingAccounts(assetMetas())
       .instruction(),
@@ -259,6 +262,7 @@ export async function buildCheckout(
         liquidityVault: pdas.liquidity(),
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
+        credit: pdas.credit(owner),
       })
       .remainingAccounts(assetMetas())
       .instruction(),
@@ -278,6 +282,8 @@ export async function buildRepay(p: HodlpayProgram, owner: PublicKey, loanIndex:
         userUsdc: ata(USDC_MINT, owner),
         liquidityVault: pdas.liquidity(),
         tokenProgram: TOKEN_PROGRAM_ID,
+        credit: pdas.credit(owner),
+        systemProgram: SystemProgram.programId,
       })
       .instruction(),
   ];
@@ -305,6 +311,7 @@ export async function buildLiquidate(
         liquidatorCollateral: ata(mint, liquidator),
         liquidityVault: pdas.liquidity(),
         tokenProgram: TOKEN_PROGRAM_ID,
+        credit: pdas.credit(owner),
       })
       .remainingAccounts(assetMetas())
       .instruction(),
@@ -336,6 +343,7 @@ export async function buildCollectOverdue(
         collectorCollateral: ata(mint, collector),
         liquidityVault: pdas.liquidity(),
         tokenProgram: TOKEN_PROGRAM_ID,
+        credit: pdas.credit(owner),
       })
       .instruction(),
   ];
@@ -507,6 +515,22 @@ export async function fetchPosition(p: HodlpayProgram, owner: PublicKey): Promis
     debt: fromUnits(acc.debt, USDC_DECIMALS),
     creditBalance: fromUnits(acc.creditBalance, USDC_DECIMALS),
     loanCount: acc.loanCount,
+  };
+}
+
+export interface ChainCredit {
+  /** USDC repaid on time since the last reset. */
+  onTimeRepaid: number;
+  onTimeInstallments: number;
+  resets: number;
+}
+
+export async function fetchCredit(p: HodlpayProgram, owner: PublicKey): Promise<ChainCredit> {
+  const c = await p.account.creditProfile.fetchNullable(pdas.credit(owner));
+  return {
+    onTimeRepaid: c ? fromUnits(c.onTimeRepaid, USDC_DECIMALS) : 0,
+    onTimeInstallments: c?.onTimeInstallments ?? 0,
+    resets: c?.resets ?? 0,
   };
 }
 

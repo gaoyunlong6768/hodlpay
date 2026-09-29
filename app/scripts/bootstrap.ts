@@ -78,10 +78,11 @@ async function main() {
   const { getPrices } = await import("../src/lib/prices");
   const { program: p } = adminProgram();
 
+  const merchantFeeBps = 150;
   if (!(await conn.getAccountInfo(hp.pdas.config()))) {
     await p.methods
       .initialize({
-        merchantFeeBps: 300,
+        merchantFeeBps,
         liquidationBonusBps: 500,
         closeFactorBps: 5_000,
         installments: 4,
@@ -99,6 +100,12 @@ async function main() {
       })
       .rpc();
     console.log("initialized config");
+  } else if ((await hp.fetchConfig(p)).merchantFeeBps !== merchantFeeBps) {
+    await p.methods
+      .setMerchantFee(merchantFeeBps)
+      .accountsPartial({ admin: admin.publicKey, config: hp.pdas.config() })
+      .rpc();
+    console.log(`merchant fee set to ${merchantFeeBps / 100}%`);
   }
 
   const { prices } = await getPrices();

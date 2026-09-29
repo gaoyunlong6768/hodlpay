@@ -1,7 +1,12 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-use crate::{constants::*, error::ErrorCode, math::valuate, state::*};
+use crate::{
+    constants::*,
+    error::ErrorCode,
+    math::{credit_bonus_bps, valuate},
+    state::*,
+};
 
 #[derive(Accounts)]
 pub struct OpenPosition<'info> {
@@ -44,6 +49,9 @@ pub struct MoveCollateral<'info> {
     #[account(mut, token::mint = asset.mint, token::authority = owner)]
     pub user_token: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
+    /// CHECK: the owner's `CreditProfile` PDA; may not exist yet.
+    #[account(seeds = [CREDIT_SEED, owner.key().as_ref()], bump)]
+    pub credit: UncheckedAccount<'info>,
 }
 
 pub fn handle_deposit(ctx: Context<MoveCollateral>, amount: u64) -> Result<()> {
@@ -88,6 +96,7 @@ pub fn handle_withdraw(ctx: Context<MoveCollateral>, amount: u64) -> Result<()> 
             ctx.program_id,
             Clock::get()?.unix_timestamp,
             ctx.accounts.config.max_price_age,
+            credit_bonus_bps(&ctx.accounts.credit, ctx.program_id)?,
         )?;
         require!(p.debt <= v.borrow_limit, ErrorCode::ExceedsMaxLtv);
     }

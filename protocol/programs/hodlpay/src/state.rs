@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{constants::MAX_ASSETS, error::ErrorCode};
+use crate::{constants::*, error::ErrorCode};
 
 #[account]
 #[derive(InitSpace)]
@@ -131,6 +131,42 @@ impl Loan {
         } else {
             Ok(self.installment_amount)
         }
+    }
+}
+
+/// On-chain repayment record. Installments paid on time raise the borrower's max LTV
+/// on new purchases, level by level; any late payment, overdue collection or
+/// liquidation resets it. Created on the borrower's first repayment.
+#[account]
+#[derive(InitSpace)]
+pub struct CreditProfile {
+    pub owner: Pubkey,
+    /// Cash repaid on time since the last reset, excluding the installment due at checkout.
+    pub on_time_repaid: u64,
+    /// Lifetime count of installments that counted toward `on_time_repaid`.
+    pub on_time_installments: u32,
+    /// Lifetime count of resets.
+    pub resets: u32,
+    pub bump: u8,
+}
+
+impl CreditProfile {
+    pub fn level(&self) -> u64 {
+        (self.on_time_repaid / CREDIT_STEP).min((CREDIT_MAX_BONUS_BPS / CREDIT_STEP_BPS) as u64)
+    }
+
+    pub fn bonus_bps(&self) -> u16 {
+        self.level() as u16 * CREDIT_STEP_BPS
+    }
+
+    pub fn record_on_time(&mut self, cash: u64) {
+        self.on_time_repaid = self.on_time_repaid.saturating_add(cash);
+        self.on_time_installments += 1;
+    }
+
+    pub fn reset(&mut self) {
+        self.on_time_repaid = 0;
+        self.resets += 1;
     }
 }
 

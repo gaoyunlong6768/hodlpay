@@ -36,11 +36,34 @@ export const ASSETS: Record<AssetId, AssetConfig> = {
 };
 
 export const PROTOCOL = {
-  merchantFeeBps: 300,
+  merchantFeeBps: 150,
   installments: 4,
   installmentIntervalDays: 14,
+  graceDays: 3,
   liquidationBonus: 0.05,
+  /** On-time repayment ladder, as enforced by the program (`CREDIT_*` constants). */
+  credit: { stepUsd: 250, stepLtv: 0.025, maxLevel: 4, marginBuffer: 0.05 },
 };
+
+export interface CreditRecord {
+  /** Cash repaid on time since the last reset, excluding installments due at checkout. */
+  onTimeRepaid: number;
+  onTimeInstallments: number;
+  resets: number;
+}
+
+export const NO_CREDIT: CreditRecord = { onTimeRepaid: 0, onTimeInstallments: 0, resets: 0 };
+
+export function creditLevel(c: CreditRecord): number {
+  return Math.min(PROTOCOL.credit.maxLevel, Math.floor(c.onTimeRepaid / PROTOCOL.credit.stepUsd + 1e-9));
+}
+
+/** Max LTV for new credit: the asset's base, raised by the credit level, kept below its margin line. */
+export function maxLtvFor(id: AssetId, c: CreditRecord): number {
+  const a = ASSETS[id];
+  const boosted = a.maxLtv + creditLevel(c) * PROTOCOL.credit.stepLtv;
+  return Math.max(a.maxLtv, Math.min(boosted, a.marginLtv - PROTOCOL.credit.marginBuffer));
+}
 
 export interface Installment {
   index: number;
@@ -88,6 +111,7 @@ export interface State {
   loans: Loan[];
   events: LedgerEvent[];
   marginAlerted: boolean;
+  credit: CreditRecord;
 }
 
 export type Status = "empty" | "healthy" | "margin" | "liquidatable";
@@ -120,6 +144,7 @@ export function initialState(prices: Record<AssetId, number>): State {
     loans: [],
     events: [],
     marginAlerted: false,
+    credit: NO_CREDIT,
   };
 }
 
@@ -136,7 +161,7 @@ export function metrics(s: State, debtOverride?: number): Metrics {
   for (const id of Object.keys(ASSETS) as AssetId[]) {
     const v = s.collateral[id] * s.prices[id];
     collateralValue += v;
-    borrowLimit += v * ASSETS[id].maxLtv;
+    borrowLimit += v * maxLtvFor(id, s.credit);
     marginLimit += v * ASSETS[id].marginLtv;
     liquidationLimit += v * ASSETS[id].liquidationLtv;
   }
@@ -238,9 +263,25 @@ export function repayNext(s: State, loanId: string): State {
           ),
         },
   );
-  return checkMargin(
-    log({ ...s, loans }, "repay", `Repaid installment ${next.index + 1}/4 (${usd(next.amount)}) to ${loan.merchant} loan`),
-  );
+  const late = s.now > next.dueAt + PROTOCOL.graceDays * DAY;
+  const credit = late
+    ? { ...s.credit, onTimeRepaid: 0, resets: s.credit.resets + 1 }
+    : next.index > 0
+      ? { ...s.credit, onTimeRepaid: s.credit.onTimeRepaid + next.amount, onTimeInstallments: s.credit.onTimeInstallments + 1 }
+      : s.credit;
+  let out = log({ ...s, loans, credit }, "repay", `Repaid installment ${next.index + 1}/4 (${usd(next.amount)}) to ${loan.merchant} loan`);
+  const note = creditChange(s.credit, credit);
+  if (note) out = log(out, "repay", note);
+  return checkMargin(out);
+}
+
+/** Ledger line for a credit level change, if any. */
+export function creditChange(before: CreditRecord, after: CreditRecord): string | null {
+  const [a, b] = [creditLevel(before), creditLevel(after)];
+  const pts = (l: number) => `${((l * PROTOCOL.credit.stepLtv) * 100).toFixed(1)} pts`;
+  if (b > a) return `Credit level ${b} of ${PROTOCOL.credit.maxLevel}: paying on time raised your max LTV by ${pts(b)}`;
+  if (after.resets > before.resets && a > 0) return `Credit level reset to 0: a late payment removed your +${pts(a)} max LTV`;
+  return null;
 }
 
 export function setPrice(s: State, asset: AssetId, price: number): State {
@@ -266,7 +307,7 @@ function checkMargin(s: State): State {
  * to bring the position back to its blended max LTV.
  */
 export function liquidate(s: State): State {
-  const m = metrics(s);
+  const m = metrics({ ...s, credit: NO_CREDIT });
   if (m.status !== "liquidatable") throw new Error("Position is not liquidatable");
   const b = PROTOCOL.liquidationBonus;
   const mx = m.blendedMaxLtv;
@@ -303,9 +344,10 @@ export function liquidate(s: State): State {
   const byId = new Map(loans.map((l) => [l.id, l]));
   const ordered = s.loans.map((l) => byId.get(l.id)!);
 
+  const credit = { ...s.credit, onTimeRepaid: 0, resets: s.credit.resets + 1 };
   return checkMargin(
     log(
-      { ...s, collateral, loans: ordered, marginAlerted: false },
+      { ...s, collateral, loans: ordered, marginAlerted: false, credit },
       "liquidation",
       `Partial liquidation: repaid ${usd(repay)} by selling ${seized.join(" + ")}. Position restored to ${(mx * 100).toFixed(0)}% LTV.`,
     ),

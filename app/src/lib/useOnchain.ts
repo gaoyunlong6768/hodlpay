@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { LAMPORTS_PER_SOL, PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import * as hp from "@/lib/hodlpay";
-import type { AssetId, Installment, LedgerEvent, Loan, Rail, State, EventKind } from "@/lib/engine";
-import { usd } from "@/lib/engine";
+import type { AssetId, CreditRecord, Installment, LedgerEvent, Loan, Rail, State, EventKind } from "@/lib/engine";
+import { creditChange, usd } from "@/lib/engine";
 
 export const MERCHANTS: Record<string, PublicKey> = {
   "Nomad Air": new PublicKey("DTs2qmbnMFp1aiokJi8pR7fFSpMQFBTJvK71x2kCiVm9"),
@@ -175,10 +175,11 @@ export function useOnchain() {
       setView(null);
       return;
     }
-    const [assets, cfg, pos, lamports, usdc, zec, pool, lp] = await Promise.all([
+    const [assets, cfg, pos, credit, lamports, usdc, zec, pool, lp] = await Promise.all([
       hp.fetchAssets(program),
       hp.fetchConfig(program),
       hp.fetchPosition(program, publicKey),
+      hp.fetchCredit(program, publicKey),
       connection.getBalance(publicKey),
       connection.getTokenAccountBalance(hp.ata(hp.USDC_MINT, publicKey)).catch(() => null),
       connection.getTokenAccountBalance(hp.ata(hp.ZEC_MINT, publicKey)).catch(() => null),
@@ -225,6 +226,7 @@ export function useOnchain() {
         loans,
         events: withCollections(load<LedgerEvent[]>(eventsKey, []), collections, meta),
         marginAlerted: false,
+        credit,
       },
       debt: pos.debt,
       creditBalance: pos.creditBalance,
@@ -344,6 +346,16 @@ export function useOnchain() {
     if (view && view.priceAge > 45) await keeper({ force: true });
   }, [view, keeper]);
 
+  /** Logs a credit level change caused by a repayment just sent. */
+  const noteCredit = useCallback(
+    async (before: CreditRecord | undefined) => {
+      if (!before || !program || !publicKey) return;
+      const note = creditChange(before, await hp.fetchCredit(program, publicKey));
+      if (note) log("repay", note);
+    },
+    [program, publicKey, log],
+  );
+
   const actions = {
     faucet: () =>
       run("faucet", async () => {
@@ -428,6 +440,7 @@ export function useOnchain() {
         const chainIndex = (await hp.readonlyProgram(connection).account.loan.fetch(new PublicKey(loanAddress))).index;
         const sig = await send(await hp.buildRepay(program!, publicKey!, chainIndex));
         log("repay", `Repaid an installment on ${loan?.item ?? "loan"}`, sig);
+        await noteCredit(view?.state.credit);
       }),
 
     repayMany: (loanAddresses: string[]) =>
@@ -441,6 +454,7 @@ export function useOnchain() {
         const sig = await send(ixs);
         const n = loanAddresses.length;
         log("repay", `Repaid ${n} overdue installment${n > 1 ? "s" : ""} before collection`, sig);
+        await noteCredit(view?.state.credit);
       }),
 
     payOff: (loanAddress: string) =>
@@ -452,6 +466,7 @@ export function useOnchain() {
         const ixs = (await Promise.all(Array.from({ length: left }, () => hp.buildRepay(program!, publicKey!, l.index)))).flat();
         const sig = await send(ixs);
         log("repay", `Paid off ${loan?.item ?? "loan"} early: ${left} installments, no interest`, sig);
+        await noteCredit(view?.state.credit);
       }),
 
     lend: (amountUsd: number) =>

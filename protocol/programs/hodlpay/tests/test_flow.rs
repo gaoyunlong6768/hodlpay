@@ -6,7 +6,7 @@ use {
     },
     hodlpay::{
         constants::*,
-        state::{Loan, Position},
+        state::{CreditProfile, Loan, Position},
         AddAssetArgs, InitializeArgs,
     },
     litesvm::LiteSVM,
@@ -52,6 +52,10 @@ fn ix(data: impl InstructionData, accounts: impl ToAccountMetas, remaining: &[Pu
     let mut metas = accounts.to_account_metas(None);
     metas.extend(remaining.iter().map(|k| AccountMeta::new_readonly(*k, false)));
     Instruction::new_with_bytes(hodlpay::id(), &data.data(), metas)
+}
+
+fn credit_pda(owner: &Pubkey) -> Pubkey {
+    pda(&[CREDIT_SEED, owner.as_ref()])
 }
 
 fn read<T: AccountDeserialize>(svm: &LiteSVM, key: &Pubkey) -> T {
@@ -207,6 +211,7 @@ fn move_collateral(env: &mut Env, u: &User, mint: Pubkey, user_token: Pubkey, am
         vault: pda(&[COLLATERAL_VAULT_SEED, mint.as_ref()]),
         user_token,
         token_program: anchor_spl::token::ID,
+        credit: credit_pda(&u.kp.pubkey()),
     };
     let remaining = [pda(&[ASSET_SEED, env.sol.as_ref()]), pda(&[ASSET_SEED, env.zec.as_ref()])];
     let i = if withdraw {
@@ -246,6 +251,7 @@ fn checkout_valued(
                 liquidity_vault: pda(&[LIQUIDITY_SEED]),
                 token_program: anchor_spl::token::ID,
                 system_program: anchor_lang::system_program::ID,
+                credit: credit_pda(&u.kp.pubkey()),
             },
             assets,
         ),
@@ -267,6 +273,8 @@ fn repay(env: &mut Env, u: &User, loan: Pubkey) -> Result<(), String> {
                 user_usdc: u.usdc_ata,
                 liquidity_vault: pda(&[LIQUIDITY_SEED]),
                 token_program: anchor_spl::token::ID,
+                credit: credit_pda(&u.kp.pubkey()),
+                system_program: anchor_lang::system_program::ID,
             },
             &[],
         ),
@@ -306,6 +314,7 @@ fn liquidate(env: &mut Env, liquidator: &User, owner: &User, repay_amount: u64) 
                 liquidator_collateral: liquidator.sol_ata,
                 liquidity_vault: pda(&[LIQUIDITY_SEED]),
                 token_program: anchor_spl::token::ID,
+                credit: credit_pda(&owner.kp.pubkey()),
             },
             &[pda(&[ASSET_SEED, env.sol.as_ref()]), pda(&[ASSET_SEED, env.zec.as_ref()])],
         ),
@@ -329,6 +338,7 @@ fn collect_overdue(env: &mut Env, collector: &User, owner: &User, loan: Pubkey) 
                 collector_collateral: collector.sol_ata,
                 liquidity_vault: pda(&[LIQUIDITY_SEED]),
                 token_program: anchor_spl::token::ID,
+                credit: credit_pda(&owner.kp.pubkey()),
             },
             &[],
         ),
@@ -682,6 +692,12 @@ fn lp_shares_earn_merchant_and_late_fees() {
     let l: Loan = read(&env.svm, &loan);
     assert_eq!(l.fee_earned, 2_400 * USDC);
 
+    // The late installment reset Alice's credit record; the two on-time ones since max it out.
+    let credit: CreditProfile = read(&env.svm, &credit_pda(&alice.kp.pubkey()));
+    assert_eq!(credit.resets, 1);
+    assert_eq!(credit.on_time_repaid, 40_000 * USDC);
+    assert_eq!(credit.bonus_bps(), CREDIT_MAX_BONUS_BPS);
+
     // Both LPs exit with their share of the $2.6k in fees.
     let pool = balance(&env.svm, &vault);
     assert_eq!(pool, 112_600 * USDC);
@@ -693,6 +709,93 @@ fn lp_shares_earn_merchant_and_late_fees() {
     liquidity(&mut env, &bob, bob_usdc, bob_lp, 10_000 * USDC, false).unwrap();
     assert!(balance(&env.svm, &bob_usdc) > 10_200 * USDC);
     assert_eq!(balance(&env.svm, &vault), 0);
+}
+
+#[test]
+fn on_time_repayments_raise_the_credit_limit() {
+    let mut env = setup();
+    let hana = new_user(&mut env, 10 * SOL, 5_000 * USDC);
+    let merchant = Keypair::new();
+    let merchant_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&merchant.pubkey())
+        .send()
+        .unwrap();
+    let (sol, sol_ata) = (env.sol, hana.sol_ata);
+    let m = merchant.pubkey();
+
+    // 10 SOL @ $120 = $1,200 at 50% max LTV: $600 of credit before any history.
+    move_collateral(&mut env, &hana, sol, sol_ata, 10 * SOL, false).unwrap();
+    assert!(checkout(&mut env, &hana, &m, merchant_usdc, 601 * USDC).is_err());
+    let first = checkout(&mut env, &hana, &m, merchant_usdc, 600 * USDC).unwrap();
+
+    // The installment paid at checkout does not count; the next three ($450) do.
+    for _ in 0..4 {
+        repay(&mut env, &hana, first).unwrap();
+    }
+    let credit: CreditProfile = read(&env.svm, &credit_pda(&hana.kp.pubkey()));
+    assert_eq!(credit.owner, hana.kp.pubkey());
+    assert_eq!(credit.on_time_repaid, 450 * USDC);
+    assert_eq!(credit.on_time_installments, 3);
+    assert_eq!(credit.bonus_bps(), 250);
+
+    // Level 1: SOL max LTV 52.5%, so $630.
+    assert!(checkout(&mut env, &hana, &m, merchant_usdc, 631 * USDC).is_err());
+    let second = checkout(&mut env, &hana, &m, merchant_usdc, 630 * USDC).unwrap();
+    // At the boosted limit, collateral cannot be withdrawn.
+    assert!(move_collateral(&mut env, &hana, sol, sol_ata, SOL / 10, true).is_err());
+
+    // Two more on time ($157.50 counts) reach level 2.
+    repay(&mut env, &hana, second).unwrap();
+    repay(&mut env, &hana, second).unwrap();
+    let credit: CreditProfile = read(&env.svm, &credit_pda(&hana.kp.pubkey()));
+    assert_eq!(credit.on_time_repaid, 607_500_000);
+    assert_eq!(credit.bonus_bps(), 500);
+
+    // Installment 3 is left unpaid past its grace period and collected from collateral: the record resets.
+    advance(&mut env, 31 * DAY + 1);
+    set_price(&mut env, sol, 120 * USDC);
+    let keeper = new_user(&mut env, 0, 10_000 * USDC);
+    collect_overdue(&mut env, &keeper, &hana, second).unwrap();
+    let credit: CreditProfile = read(&env.svm, &credit_pda(&hana.kp.pubkey()));
+    assert_eq!(credit.on_time_repaid, 0);
+    assert_eq!(credit.resets, 1);
+
+    // Back to 50%: ~8.61 SOL = $1,033 → $516 limit, $157.50 owed. At 55% this would have fit.
+    assert!(checkout(&mut env, &hana, &m, merchant_usdc, 380 * USDC).is_err());
+    checkout(&mut env, &hana, &m, merchant_usdc, 350 * USDC).unwrap();
+}
+
+#[test]
+fn admin_lowers_the_merchant_fee() {
+    let mut env = setup();
+    let ivy = new_user(&mut env, 25 * SOL, 0);
+    let merchant = Keypair::new();
+    let merchant_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&merchant.pubkey())
+        .send()
+        .unwrap();
+    let (sol, sol_ata) = (env.sol, ivy.sol_ata);
+    move_collateral(&mut env, &ivy, sol, sol_ata, 25 * SOL, false).unwrap();
+    let first = checkout(&mut env, &ivy, &merchant.pubkey(), merchant_usdc, 500 * USDC).unwrap();
+
+    let set_fee = |admin: Pubkey, merchant_fee_bps: u16| {
+        ix(
+            hodlpay::instruction::SetMerchantFee { merchant_fee_bps },
+            hodlpay::accounts::SetMerchantFee { admin, config: pda(&[CONFIG_SEED]) },
+            &[],
+        )
+    };
+    assert!(send(&mut env.svm, set_fee(ivy.kp.pubkey(), 150), &[&ivy.kp]).is_err());
+    assert!(send(&mut env.svm, set_fee(env.admin.pubkey(), 2_000), &[&env.admin]).is_err());
+    let admin = env.admin.insecure_clone();
+    send(&mut env.svm, set_fee(admin.pubkey(), 150), &[&admin]).unwrap();
+
+    // New checkouts pay 1.5%; the open loan keeps its 3%.
+    let before = balance(&env.svm, &merchant_usdc);
+    let second = checkout(&mut env, &ivy, &merchant.pubkey(), merchant_usdc, 500 * USDC).unwrap();
+    assert_eq!(balance(&env.svm, &merchant_usdc) - before, 492_500_000);
+    assert_eq!(read::<Loan>(&env.svm, &second).fee, 7_500_000);
+    assert_eq!(read::<Loan>(&env.svm, &first).fee, 15 * USDC);
 }
 
 fn price_update(feed: [u8; 32], price: i64, conf: u64, exponent: i32, publish_time: i64, full: bool) -> Vec<u8> {

@@ -21,6 +21,24 @@ pub const LOAN_SEED: &[u8] = b"loan";
 #[constant]
 pub const LP_MINT_SEED: &[u8] = b"lp_mint";
 
+#[constant]
+pub const CREDIT_SEED: &[u8] = b"credit";
+
+/// USDC (base units) repaid on time per credit level.
+#[constant]
+pub const CREDIT_STEP: u64 = 250_000_000;
+
+/// Max LTV added per credit level.
+#[constant]
+pub const CREDIT_STEP_BPS: u16 = 250;
+
+#[constant]
+pub const CREDIT_MAX_BONUS_BPS: u16 = 1_000;
+
+/// A credit-boosted max LTV always stays this far below the asset's margin line.
+#[constant]
+pub const CREDIT_MARGIN_BUFFER_BPS: u16 = 500;
+
 /// Collateral slots per position.
 pub const MAX_ASSETS: usize = 4;
 

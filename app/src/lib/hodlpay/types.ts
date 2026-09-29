@@ -298,6 +298,28 @@ export type Hodlpay = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "credit",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -443,6 +465,30 @@ export type Hodlpay = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "credit",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "position.owner",
+                "account": "position"
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -544,6 +590,28 @@ export type Hodlpay = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "credit",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -825,6 +893,30 @@ export type Hodlpay = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "credit",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "position.owner",
+                "account": "position"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -959,6 +1051,7 @@ export type Hodlpay = {
       "accounts": [
         {
           "name": "owner",
+          "writable": true,
           "signer": true,
           "relations": [
             "position"
@@ -1048,6 +1141,33 @@ export type Hodlpay = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "credit",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -1096,6 +1216,53 @@ export type Hodlpay = {
         {
           "name": "keeper",
           "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "setMerchantFee",
+      "discriminator": [
+        15,
+        171,
+        111,
+        27,
+        130,
+        117,
+        71,
+        187
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "merchantFeeBps",
+          "type": "u16"
         }
       ]
     },
@@ -1265,6 +1432,28 @@ export type Hodlpay = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "credit",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -1363,6 +1552,19 @@ export type Hodlpay = {
         250,
         204,
         130
+      ]
+    },
+    {
+      "name": "creditProfile",
+      "discriminator": [
+        155,
+        31,
+        253,
+        22,
+        211,
+        62,
+        131,
+        148
       ]
     },
     {
@@ -1803,6 +2005,48 @@ export type Hodlpay = {
       }
     },
     {
+      "name": "creditProfile",
+      "docs": [
+        "On-chain repayment record. Installments paid on time raise the borrower's max LTV",
+        "on new purchases, level by level; any late payment, overdue collection or",
+        "liquidation resets it. Created on the borrower's first repayment."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "onTimeRepaid",
+            "docs": [
+              "Cash repaid on time since the last reset, excluding the installment due at checkout."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "onTimeInstallments",
+            "docs": [
+              "Lifetime count of installments that counted toward `on_time_repaid`."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "resets",
+            "docs": [
+              "Lifetime count of resets."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "initializeArgs",
       "type": {
         "kind": "struct",
@@ -2143,6 +2387,40 @@ export type Hodlpay = {
       "name": "configSeed",
       "type": "bytes",
       "value": "[99, 111, 110, 102, 105, 103]"
+    },
+    {
+      "name": "creditMarginBufferBps",
+      "docs": [
+        "A credit-boosted max LTV always stays this far below the asset's margin line."
+      ],
+      "type": "u16",
+      "value": "500"
+    },
+    {
+      "name": "creditMaxBonusBps",
+      "type": "u16",
+      "value": "1000"
+    },
+    {
+      "name": "creditSeed",
+      "type": "bytes",
+      "value": "[99, 114, 101, 100, 105, 116]"
+    },
+    {
+      "name": "creditStep",
+      "docs": [
+        "USDC (base units) repaid on time per credit level."
+      ],
+      "type": "u64",
+      "value": "250000000"
+    },
+    {
+      "name": "creditStepBps",
+      "docs": [
+        "Max LTV added per credit level."
+      ],
+      "type": "u16",
+      "value": "250"
     },
     {
       "name": "liquiditySeed",

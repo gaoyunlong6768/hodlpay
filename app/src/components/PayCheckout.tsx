@@ -5,7 +5,7 @@ import Link from "next/link";
 import WalletProviders from "@/components/WalletProviders";
 import { Card, Row, WalletBar } from "@/components/ui";
 import { TEMPO, explorerAddress, explorerTx, tempoExplorerTx } from "@/lib/hodlpay";
-import { ASSETS, PROTOCOL, metrics, usd, type AssetId } from "@/lib/engine";
+import { ASSETS, NO_CREDIT, PROTOCOL, maxLtvFor, metrics, usd, type AssetId } from "@/lib/engine";
 import type { PayRequest } from "@/lib/paylink";
 import { useOnchain } from "@/lib/useOnchain";
 
@@ -92,11 +92,12 @@ function Pay({ r }: { r: PayRequest }) {
   }
 
   const m = view ? metrics(view.state, view.debt) : null;
+  const credit = view?.state.credit ?? NO_CREDIT;
   const available = m?.available ?? 0;
   const shortfall = Math.max(0, r.amount - available);
   const plan = (id: AssetId) => {
     const price = view?.state.prices[id] ?? 0;
-    const need = price ? Math.ceil(((shortfall * 1.02) / (price * ASSETS[id].maxLtv)) * 1e4) / 1e4 : 0;
+    const need = price ? Math.ceil(((shortfall * 1.02) / (price * maxLtvFor(id, credit))) * 1e4) / 1e4 : 0;
     const has = view ? Math.max(0, id === "SOL" ? view.balances.SOL - 0.05 : view.balances[id]) : 0;
     return { price, need, has };
   };
@@ -143,7 +144,7 @@ function Pay({ r }: { r: PayRequest }) {
                       onClick={() => setAsset(id)}
                       className={`py-2 transition ${asset === id ? "bg-ink text-paper" : "hover:bg-paper-2"}`}
                     >
-                      {id} · max LTV {(ASSETS[id].maxLtv * 100).toFixed(0)}%
+                      {id} · max LTV {+(maxLtvFor(id, credit) * 100).toFixed(1)}%
                     </button>
                   ))}
                 </div>

@@ -12,9 +12,11 @@ import {
   PROTOCOL,
   advanceDays,
   checkout,
+  creditLevel,
   deposit,
   initialState,
   liquidate,
+  maxLtvFor,
   metrics,
   outstanding,
   repayNext,
@@ -22,6 +24,7 @@ import {
   usd,
   withdraw,
   type AssetId,
+  type CreditRecord,
   type Loan,
   type Rail,
   type State,
@@ -134,7 +137,7 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
           </span>
           <span className="text-ink">
             Repay {usd(m.debt - m.borrowLimit)} or lock about{" "}
-            {((m.debt - m.borrowLimit) / (state.prices.zenZEC * ASSETS.zenZEC.maxLtv)).toFixed(2)} more zenZEC to get back
+            {((m.debt - m.borrowLimit) / (state.prices.zenZEC * maxLtvFor("zenZEC", state.credit))).toFixed(2)} more zenZEC to get back
             under your max LTV.
             {m.status === "liquidatable" && " Until then the keeper may sell part of your collateral."}
           </span>
@@ -182,7 +185,7 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
         />
       </div>
       <div className="lg:col-span-4">
-        <CreditLine m={m} loading={loading} />
+        <CreditLine m={m} credit={state.credit} loading={loading} />
       </div>
       <div className="lg:col-span-4">
         <Checkout
@@ -387,7 +390,7 @@ function SimConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) =>
           <Vault state={state} onDeposit={(a, x) => act((s) => deposit(s, a, x))} onWithdraw={(a, x) => act((s) => withdraw(s, a, x))} />
         </div>
         <div className="lg:col-span-4">
-          <CreditLine m={m} />
+          <CreditLine m={m} credit={state.credit} />
         </div>
         <div className="lg:col-span-4">
           <Checkout
@@ -515,7 +518,7 @@ function Vault({
               <span>
                 <span className="block font-medium">{id}</span>
                 <span className="num block text-[11px] opacity-70">
-                  {a.chain} · max LTV {(a.maxLtv * 100).toFixed(0)}%
+                  {a.chain} · max LTV {+(maxLtvFor(id, state.credit) * 100).toFixed(1)}%
                 </span>
               </span>
               <span className="num text-right text-sm">
@@ -551,7 +554,7 @@ function Vault({
         {priced ? (
           <>
             ≈ {usd((Number.isFinite(x) ? x : 0) * state.prices[asset])} · adds{" "}
-            {usd((Number.isFinite(x) ? x : 0) * state.prices[asset] * ASSETS[asset].maxLtv)} credit
+            {usd((Number.isFinite(x) ? x : 0) * state.prices[asset] * maxLtvFor(asset, state.credit))} credit
           </>
         ) : (
           <Skel className="w-40" />
@@ -578,7 +581,40 @@ function Vault({
   );
 }
 
-function CreditLine({ m, loading }: { m: ReturnType<typeof metrics>; loading?: boolean }) {
+function CreditLadder({ credit, loading }: { credit: CreditRecord; loading?: boolean }) {
+  const { stepUsd, stepLtv, maxLevel } = PROTOCOL.credit;
+  const level = creditLevel(credit);
+  const pts = (l: number) => `${(l * stepLtv * 100).toFixed(1)} pts`;
+  return (
+    <div className="dash mt-4 pt-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="num text-[11px] uppercase tracking-widest text-ink-soft">On-time credit</span>
+        <span className="num text-xs font-medium">
+          {loading ? <Skel className="w-24" /> : `Level ${level}/${maxLevel} · max LTV +${pts(level)}`}
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-4 gap-1" aria-hidden>
+        {Array.from({ length: maxLevel }, (_, i) => (
+          <div key={i} className="relative h-1.5 border border-ink/30 bg-paper-2">
+            <div
+              className="absolute inset-y-0 left-0 bg-mint transition-all duration-500"
+              style={{ width: `${Math.min(1, Math.max(0, credit.onTimeRepaid / stepUsd - i)) * 100}%` }}
+            />
+          </div>
+        ))}
+      </div>
+      <p className="num mt-2 text-[11px] leading-relaxed text-ink-soft">
+        {level < maxLevel
+          ? `Repay ${usd(stepUsd * (level + 1) - credit.onTimeRepaid)} more on time for +${pts(level + 1)}. `
+          : `Top level: +${pts(maxLevel)} on every asset. `}
+        Collateral replaces the credit check; each on-time installment after checkout lowers the collateral you need. A late
+        payment or collection resets it.
+      </p>
+    </div>
+  );
+}
+
+function CreditLine({ m, credit, loading }: { m: ReturnType<typeof metrics>; credit: CreditRecord; loading?: boolean }) {
   const tone = loading
     ? "text-ink-soft"
     : m.status === "liquidatable"
@@ -647,6 +683,7 @@ function CreditLine({ m, loading }: { m: ReturnType<typeof metrics>; loading?: b
           strong
         />
       </div>
+      <CreditLadder credit={credit} loading={loading} />
     </Card>
   );
 }

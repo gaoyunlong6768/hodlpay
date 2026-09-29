@@ -5,7 +5,7 @@ use crate::{
     constants::*,
     error::ErrorCode,
     instructions::credit::settle_installment,
-    math::{amount_for_value, apply_bps, valuate, value_e6},
+    math::{amount_for_value, apply_bps, reset_credit, valuate, value_e6},
     state::*,
 };
 
@@ -28,6 +28,9 @@ pub struct Liquidate<'info> {
     #[account(mut, address = config.liquidity_vault)]
     pub liquidity_vault: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
+    /// CHECK: the owner's `CreditProfile` PDA, reset if it exists.
+    #[account(mut, seeds = [CREDIT_SEED, position.owner.as_ref()], bump)]
+    pub credit: UncheckedAccount<'info>,
 }
 
 /// Repays up to `close_factor` of the debt and seizes collateral worth
@@ -44,6 +47,7 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, repay_amount: u64) -> Result<()
         ctx.program_id,
         Clock::get()?.unix_timestamp,
         config.max_price_age,
+        0,
     )?;
     require!(position.debt > v.liquidation_limit, ErrorCode::NotLiquidatable);
     require!(
@@ -111,6 +115,7 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, repay_amount: u64) -> Result<()
         p.credit_balance += bad_debt;
         p.debt = 0;
     }
+    reset_credit(&ctx.accounts.credit, ctx.program_id)?;
 
     emit!(LiquidationEvent {
         owner: p.owner,
@@ -149,6 +154,9 @@ pub struct CollectOverdue<'info> {
     #[account(mut, address = config.liquidity_vault)]
     pub liquidity_vault: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
+    /// CHECK: the owner's `CreditProfile` PDA, reset if it exists.
+    #[account(mut, seeds = [CREDIT_SEED, position.owner.as_ref()], bump)]
+    pub credit: UncheckedAccount<'info>,
 }
 
 /// Settles an installment the borrower left unpaid past the grace period, from
@@ -210,6 +218,7 @@ pub fn handle_collect_overdue(ctx: Context<CollectOverdue>) -> Result<()> {
         )?;
         ctx.accounts.position.amounts[slot] -= seize;
         ctx.accounts.asset.total_deposited -= seize;
+        reset_credit(&ctx.accounts.credit, ctx.program_id)?;
     }
 
     let mint = ctx.accounts.asset.mint;
@@ -250,6 +259,7 @@ pub fn handle_check_health(ctx: Context<CheckHealth>) -> Result<()> {
         ctx.program_id,
         Clock::get()?.unix_timestamp,
         ctx.accounts.config.max_price_age,
+        0,
     )?;
     if p.debt > v.margin_limit {
         emit!(MarginEvent {

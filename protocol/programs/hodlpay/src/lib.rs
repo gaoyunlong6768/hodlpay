@@ -24,6 +24,10 @@ pub mod hodlpay {
         admin::handle_set_keeper(ctx, keeper)
     }
 
+    pub fn set_merchant_fee(ctx: Context<SetMerchantFee>, merchant_fee_bps: u16) -> Result<()> {
+        admin::handle_set_merchant_fee(ctx, merchant_fee_bps)
+    }
+
     pub fn add_asset(ctx: Context<AddAsset>, args: AddAssetArgs) -> Result<()> {
         admin::handle_add_asset(ctx, args)
     }

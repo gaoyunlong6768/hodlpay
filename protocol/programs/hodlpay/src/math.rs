@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::BPS,
+    constants::{BPS, CREDIT_MARGIN_BUFFER_BPS},
     error::ErrorCode,
-    state::{CollateralAsset, Position},
+    state::{CollateralAsset, CreditProfile, Position},
 };
 
 pub struct Valuation {
@@ -41,14 +41,39 @@ pub fn read_asset(info: &AccountInfo, program_id: &Pubkey) -> Result<CollateralA
     CollateralAsset::try_deserialize(&mut &data[..])
 }
 
+/// The borrower's `CreditProfile` at its PDA, or `None` before their first repayment.
+fn load_credit(info: &AccountInfo, program_id: &Pubkey) -> Result<Option<CreditProfile>> {
+    if info.owner != program_id || info.data_is_empty() {
+        return Ok(None);
+    }
+    let data = info.try_borrow_data()?;
+    Ok(Some(CreditProfile::try_deserialize(&mut &data[..])?))
+}
+
+pub fn credit_bonus_bps(info: &AccountInfo, program_id: &Pubkey) -> Result<u16> {
+    Ok(load_credit(info, program_id)?.map_or(0, |c| c.bonus_bps()))
+}
+
+/// Resets the borrower's on-time record, if they have one.
+pub fn reset_credit(info: &AccountInfo, program_id: &Pubkey) -> Result<()> {
+    let Some(mut c) = load_credit(info, program_id)? else {
+        return Ok(());
+    };
+    c.reset();
+    let mut data = info.try_borrow_mut_data()?;
+    c.try_serialize(&mut &mut data[..])
+}
+
 /// Values every collateral slot in `position`. `assets` must contain the
-/// `CollateralAsset` account for each non-empty slot.
+/// `CollateralAsset` account for each non-empty slot. `credit_bonus_bps` raises
+/// each asset's max LTV, capped `CREDIT_MARGIN_BUFFER_BPS` below its margin line.
 pub fn valuate(
     position: &Position,
     assets: &[AccountInfo],
     program_id: &Pubkey,
     now: i64,
     max_price_age: i64,
+    credit_bonus_bps: u16,
 ) -> Result<Valuation> {
     let parsed = assets
         .iter()
@@ -76,7 +101,12 @@ pub fn valuate(
         );
         let value = value_e6(*amount, asset.price_e6, asset.decimals)?;
         v.collateral_value = v.collateral_value.checked_add(value).ok_or(ErrorCode::Overflow)?;
-        v.borrow_limit += apply_bps(value, asset.max_ltv_bps);
+        let max_ltv = asset
+            .max_ltv_bps
+            .saturating_add(credit_bonus_bps)
+            .min(asset.margin_ltv_bps.saturating_sub(CREDIT_MARGIN_BUFFER_BPS))
+            .max(asset.max_ltv_bps);
+        v.borrow_limit += apply_bps(value, max_ltv);
         v.margin_limit += apply_bps(value, asset.margin_ltv_bps);
         v.liquidation_limit += apply_bps(value, asset.liquidation_ltv_bps);
     }

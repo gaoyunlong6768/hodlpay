@@ -4,7 +4,7 @@ import SiteHeader from "@/components/SiteHeader";
 const STEPS = [
   ["Lock", "Deposit SOL or zenZEC into an on-chain vault. You keep the upside."],
   ["Pay", "Check out anywhere. The merchant is paid in full, instantly, in stablecoins."],
-  ["Repay", "Four interest-free installments. Top up or repay early any time."],
+  ["Repay", "Four interest-free installments. Every one paid on time lowers the collateral you need next time."],
 ];
 
 export default function Home() {
@@ -23,8 +23,8 @@ export default function Home() {
             <span className="italic text-mint">Keep</span> your crypto.
           </h1>
           <p className="rise mt-6 max-w-xl text-lg text-ink-soft" style={{ animationDelay: "160ms" }}>
-            HodlPay turns SOL and zenZEC into a stablecoin credit line you can use at any checkout. No selling, no
-            credit check, no interest. Merchants get paid upfront on Solana or Tempo.
+            HodlPay turns SOL and zenZEC into a stablecoin credit line you can use at any checkout. Your collateral is the
+            credit check: no selling, no personal data, no interest. Merchants get paid upfront on Solana or Tempo.
           </p>
           <div className="rise mt-8 flex flex-wrap gap-3" style={{ animationDelay: "240ms" }}>
             <a href="#console" className="bg-ink px-5 py-3 text-sm font-medium text-paper transition hover:bg-mint">

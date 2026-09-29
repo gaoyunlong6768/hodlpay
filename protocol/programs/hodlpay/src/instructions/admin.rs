@@ -97,6 +97,20 @@ pub fn handle_set_keeper(ctx: Context<SetKeeper>, keeper: Pubkey) -> Result<()> 
     Ok(())
 }
 
+#[derive(Accounts)]
+pub struct SetMerchantFee<'info> {
+    pub admin: Signer<'info>,
+    #[account(mut, seeds = [CONFIG_SEED], bump = config.bump, has_one = admin)]
+    pub config: Account<'info, Config>,
+}
+
+/// Applies to new checkouts; open loans keep the fee they were created with.
+pub fn handle_set_merchant_fee(ctx: Context<SetMerchantFee>, merchant_fee_bps: u16) -> Result<()> {
+    require!(merchant_fee_bps < 2_000, ErrorCode::InvalidParam);
+    ctx.accounts.config.merchant_fee_bps = merchant_fee_bps;
+    Ok(())
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct AddAssetArgs {
     pub max_ltv_bps: u16,

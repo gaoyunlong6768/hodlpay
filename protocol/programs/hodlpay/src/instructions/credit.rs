@@ -4,7 +4,7 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use crate::{
     constants::*,
     error::ErrorCode,
-    math::{apply_bps, valuate},
+    math::{apply_bps, credit_bonus_bps, valuate},
     state::*,
 };
 
@@ -41,6 +41,9 @@ pub struct Checkout<'info> {
     pub liquidity_vault: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+    /// CHECK: the owner's `CreditProfile` PDA; may not exist yet.
+    #[account(seeds = [CREDIT_SEED, owner.key().as_ref()], bump)]
+    pub credit: UncheckedAccount<'info>,
 }
 
 /// Remaining accounts: the `CollateralAsset` of every non-empty slot in the position.
@@ -55,6 +58,7 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
         ctx.program_id,
         now,
         config.max_price_age,
+        credit_bonus_bps(&ctx.accounts.credit, ctx.program_id)?,
     )?;
     let new_debt = ctx
         .accounts
@@ -119,6 +123,7 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
 
 #[derive(Accounts)]
 pub struct Repay<'info> {
+    #[account(mut)]
     pub owner: Signer<'info>,
     #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Box<Account<'info, Config>>,
@@ -141,11 +146,22 @@ pub struct Repay<'info> {
     #[account(mut, address = config.liquidity_vault)]
     pub liquidity_vault: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
+    #[account(
+        init_if_needed,
+        payer = owner,
+        space = 8 + CreditProfile::INIT_SPACE,
+        seeds = [CREDIT_SEED, owner.key().as_ref()],
+        bump
+    )]
+    pub credit: Box<Account<'info, CreditProfile>>,
+    pub system_program: Program<'info, System>,
 }
 
 /// Pays the next installment. Any credit left by a liquidation is applied first.
 /// Past the grace period a late fee is added, paid in cash to liquidity providers.
 /// Each installment also releases its share of the merchant fee to LPs.
+/// Cash paid on time after the checkout installment builds the credit record;
+/// a late payment resets it.
 pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     let due = ctx.accounts.loan.next_installment()?;
     let now = Clock::get()?.unix_timestamp;
@@ -155,6 +171,17 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     let cash = due - from_credit;
     // Only the part the borrower still owes in cash can be late.
     let late_fee = if late { apply_bps(cash, ctx.accounts.config.late_fee_bps) } else { 0 };
+
+    let credit = &mut ctx.accounts.credit;
+    if credit.owner == Pubkey::default() {
+        credit.owner = ctx.accounts.owner.key();
+        credit.bump = ctx.bumps.credit;
+    }
+    if cash > 0 && late {
+        credit.reset();
+    } else if cash > 0 && ctx.accounts.loan.installments_paid > 0 {
+        credit.record_on_time(cash);
+    }
 
     if cash + late_fee > 0 {
         token::transfer(

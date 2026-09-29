@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Card, Row, Skel } from "@/components/ui";
 import * as hp from "@/lib/hodlpay";
-import { usd, type Rail } from "@/lib/engine";
+import { PROTOCOL, usd, type Rail } from "@/lib/engine";
 import { isEvm, isSolana, payPath, type PayRequest } from "@/lib/paylink";
 import { CATALOG, MERCHANTS } from "@/lib/useOnchain";
 
@@ -68,7 +68,7 @@ export default function MerchantPortal() {
         </h1>
         <p className="mt-4 text-lg text-ink-soft">
           Share a payment link. Shoppers pay with a credit line backed by the SOL or zenZEC they keep; you receive the
-          full amount minus a 3% fee, instantly, in USDC on Solana
+          full amount minus a {PROTOCOL.merchantFeeBps / 100}% fee, instantly, in USDC on Solana
           or in stablecoins on Tempo. No crypto price risk, no chargebacks, no repayment risk.
         </p>
       </div>
