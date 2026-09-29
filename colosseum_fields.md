@@ -49,4 +49,4 @@ https://github.com/gaoyunlong6768/hodlpay
 The whole product, built during the hackathon: protocol/ is the Anchor program on Solana with LiteSVM tests, tempo/ is the Solidity settlement contract on Tempo Moderato, app/ is the Next.js console, hosted checkout, merchant portal and Tempo audit page, plus keeper, attester and smoke-test scripts. README covers architecture, trust assumptions, how it compares, and how to run it locally.
 
 ## Access instructions (<=300)
-No login. Solana devnet (Tempo payouts on Tempo testnet). Open the console, click "Use demo wallet" (or Phantom on devnet), then "Get test funds". Lock zenZEC, buy an item, repay, then drag Risk desk to -60% to see the keeper liquidate. Merchant portal: /merchant. Tempo payout audit: /audit
+No login; Solana devnet, Tempo testnet. Console: "Use demo wallet", "Get test funds", lock zenZEC, buy, repay; drag Risk desk to -60% to see the keeper liquidate. /merchant: payment links and a Solana Pay POS, whose QR you can pay in 4 at /scan. /audit: every Tempo payout.
