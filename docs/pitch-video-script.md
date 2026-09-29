@@ -2,7 +2,7 @@
 
 录制建议：本人出镜 + 幻灯片/产品画面切换，英文讲解，语速放慢。每段括号内是画面提示，台词可按口语习惯微调。目标时长 2:30 到 2:45，超过就删“Why now”里的一句。
 
-核心一句（被问到和 Yumi Finance 的区别时也用这句）：“Yumi underwrites first and hopes; HodlPay lends safely first, then learns.” 视频里不点名 Yumi，差异靠“collateral is the credit check”“1.5%”“on-time raises your limit”三处体现。
+核心一句（被问到和 Yumi Finance 的区别时也用这句）：“Yumi underwrites first and hopes; HodlPay lends safely first, then learns.” 视频里不点名 Yumi，差异靠“collateral is the credit check”“1.5%”“on-time raises your limit”“scan any Solana Pay QR”四处体现。最后一处最有杀伤力：Yumi 要商户接 SDK，我们不用商户做任何事。
 
 ---
 
@@ -12,7 +12,7 @@
 
 **0:20 – 1:02 · What it is** (landing page, then Lock / Pay / Repay cards)
 
-"HodlPay is Buy Now, Pay Later backed by crypto. You lock SOL or zenZEC, Zcash on Solana, and get a stablecoin credit line. At checkout the merchant is paid in full, upfront, in USDC on Solana or in stablecoins on Tempo. You repay in four interest-free installments. Your collateral is the credit check: no selling, no personal data, instant approval anywhere in the world. And every installment you pay on time raises your limit on-chain, so loyal customers need less collateral. Crypto cards already let you spend against collateral, but you pay interest until the loan is closed. We flip that: like Klarna, the merchant pays, and you get a fixed plan at zero percent."
+"HodlPay is Buy Now, Pay Later backed by crypto. You lock SOL or zenZEC, Zcash on Solana, and get a stablecoin credit line. At checkout the merchant is paid in full, upfront, in USDC on Solana or in stablecoins on Tempo. You repay in four interest-free installments. Your collateral is the credit check: no selling, no personal data, instant approval anywhere in the world. And every installment you pay on time raises your limit on-chain, so loyal customers need less collateral. It even works at shops that have never heard of us: scan any Solana Pay QR, and the merchant gets a normal USDC payment while you pay in four. Crypto cards already let you spend against collateral, but you pay interest until the loan is closed. We flip that: like Klarna, the merchant pays, and you get a fixed plan at zero percent."
 
 **1:02 – 1:37 · Why me** (photo / bullet slide)
 

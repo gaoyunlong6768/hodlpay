@@ -4,7 +4,7 @@
 
 **Spend your crypto. Keep your crypto.**
 
-HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash on Solana) as collateral and get a stablecoin credit line they can use at any checkout. The merchant is paid upfront in USDC on Solana or in stablecoins on Tempo; the user repays in 4 interest-free installments. No selling (so no capital-gains sale in most jurisdictions), no credit check and no personal data: the collateral is the credit check, and every installment paid on time raises the credit limit on-chain.
+HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash on Solana) as collateral and get a stablecoin credit line they can use at any checkout. The merchant is paid upfront in USDC on Solana or in stablecoins on Tempo; the user repays in 4 interest-free installments. No selling (so no capital-gains sale in most jurisdictions), no credit check and no personal data: the collateral is the credit check, and every installment paid on time raises the credit limit on-chain. It also works at shops that have never heard of HodlPay: scan the merchant's existing Solana Pay QR and pay it in 4, while their point of sale sees a normal USDC payment.
 
 Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 
@@ -17,7 +17,7 @@ Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 3. Lock zenZEC, buy the $860 flight and pick the settlement rail (USDC on Solana or stablecoins on Tempo).
 4. Repay an installment (on-time repayments move the credit ladder in the Credit line card), then drag the Risk desk slider to -60% to trigger a margin alert and a keeper liquidation.
 
-Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchant](https://hodlpay.vercel.app/merchant). Every action is a real devnet transaction linked to the explorer.
+Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchant](https://hodlpay.vercel.app/merchant). To try Solana Pay, open **Solana Pay point of sale** there, press **Show Solana Pay code**, then scan it at [hodlpay.vercel.app/scan](https://hodlpay.vercel.app/scan) on your phone (or press **Pay it with HodlPay here**); the point of sale confirms the payment with `@solana/pay`'s own `validateTransfer`. Every action is a real devnet transaction linked to the explorer.
 
 | | |
 | --- | --- |
@@ -68,7 +68,21 @@ The pool is value-accruing: `pool value = idle USDC in vault + outstanding debt 
 ### Merchant side
 
 - **Payment links** (`/pay?merchant=…&item=…&amount=…&rail=solana|tempo&to=…`): a hosted checkout any merchant can send or embed. The shopper connects a wallet, locks just enough SOL or zenZEC if their credit is short, and pays in 4. The merchant is paid in the same transaction.
+- **Any Solana Pay merchant** (`/scan`): see [Pay any Solana Pay QR](#pay-any-solana-pay-qr). No integration and no fee for the merchant.
 - **Merchant portal** (`/merchant`): set payout addresses, generate a payment link, QR code and embeddable "Pay in 4 with HodlPay" button, and see every sale: Solana loans read from the program (filtered by merchant), Tempo payouts read from the settlement contract's `Settled` events.
+
+### Pay any Solana Pay QR
+
+A shopper scans a merchant's standard Solana Pay transfer request (`solana:<wallet>?amount=…&spl-token=<USDC>&reference=…`) with the camera, a screenshot or a pasted link. HodlPay turns it into one transaction:
+
+1. `checkout` finances the plan to the shopper's own USDC account.
+2. `repay` takes the first installment, if the wallet can cover it.
+3. The memo from the code, if there is one.
+4. A plain SPL `transferChecked` of exactly the requested amount to the merchant, with the code's reference keys attached.
+
+That is the shape Solana Pay's `validateTransfer` checks: the transfer is the last instruction, the memo is right before it, and the reference keys match. So the merchant's existing point of sale finds the payment by its reference and accepts it without knowing HodlPay exists; the merchant gets 100% of the price. Because this merchant never agreed to a fee, the shopper's plan carries the 1.5% instead (a $42.50 code becomes a $43.15 plan, 4 × $10.79). Partner merchants who take HodlPay links pay it instead. The program is unchanged: this is the same `checkout`, with the shopper as the payee. Only transfer requests in USDC are supported; transaction requests (`solana:https://…`), where the merchant builds the transaction, are on the roadmap.
+
+The merchant portal includes a minimal Solana Pay point of sale with no HodlPay code in its verification path (`findReference` + `validateTransfer` from `@solana/pay`) to show this end to end.
 
 ### Oracle
 
@@ -89,7 +103,7 @@ Spending against crypto collateral already exists. What is different here is who
 | Merchant settlement | USDC on Solana or stablecoins on Tempo | Stablecoins on Solana | USDC on Solana | Visa rails | Visa rails | Fiat, days later |
 | Custody | Non-custodial program | n/a | Non-custodial (Kamino) | Non-custodial (Safe) | Custodial | n/a |
 
-- **Versus Yumi Finance** (on-chain pay-in-4, Cypherpunk DeFi track winner): Yumi underwrites first and hopes to be repaid, so it has to judge who is creditworthy and carry default losses. HodlPay lends safely first and then learns: every loan is backed by collateral, so approval needs no personal data and works for any holder anywhere, and a missed installment is collected from collateral instead of written off. With no default losses to price in, the merchant fee is half (1.5% instead of 3%), and on-time repayments lower the collateral a shopper needs over time. The two approaches serve different people: Yumi reaches shoppers without crypto wealth, HodlPay reaches holders who don't want to sell it.
+- **Versus Yumi Finance** (on-chain pay-in-4, Cypherpunk DeFi track winner): Yumi underwrites first and hopes to be repaid, so it has to judge who is creditworthy and carry default losses. HodlPay lends safely first and then learns: every loan is backed by collateral, so approval needs no personal data and works for any holder anywhere, and a missed installment is collected from collateral instead of written off. With no default losses to price in, the merchant fee is half (1.5% instead of 3%), and on-time repayments lower the collateral a shopper needs over time. HodlPay also needs no merchant integration to start: any merchant that already takes Solana Pay can be paid in 4 today. The two approaches serve different people: Yumi reaches shoppers without crypto wealth, HodlPay reaches holders who don't want to sell it.
 - **Versus crypto cards and borrow routers**: they are loans with the shopper paying interest for as long as the balance is open. HodlPay moves the cost to the merchant, which is how BNPL wins checkout share, and gives the shopper a fixed end date. The merchant also gets a sales channel: hosted payment links and a portal, not just a payment method.
 - **Versus Klarna and Affirm**: same economics for the merchant, but no credit check, so it serves crypto holders anywhere, and the merchant is paid in stablecoins in seconds instead of fiat in days.
 - **Chains and assets**: Tempo settlement for merchants who want payment-chain stablecoins, and zenZEC collateral so ZEC holders can pay at checkout, where today their only on-chain option on Solana is an interest-bearing loan (Kamino's ZEC market).
@@ -258,8 +272,8 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 ## Roadmap
 
 - Mainnet with real USDC and zenZEC; drop keeper-posted prices once every asset has a sponsored Pyth feed
-- Pay any Solana Pay QR in 4: scan a merchant's existing Solana Pay code, HodlPay pays it in full and the shopper repays in 4, with no merchant integration
-- Merchant SDK (React button, webhooks on sale) and Solana Pay transaction requests
+- Solana Pay transaction requests (merchant-built transactions) and mainnet USDC codes from wallets and point-of-sale apps
+- Merchant SDK (React button, webhooks on sale)
 - Portable credit record: let other protocols read `CreditProfile` (on-time volume, resets) as a privacy-preserving repayment history
 - Longer terms with interest for larger purchases
 - Tempo-native repayments and a direct Tempo liquidity pool

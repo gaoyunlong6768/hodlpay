@@ -21,7 +21,8 @@ Start with purchases that are large enough to matter and paid online in stableco
 
 ## Channels
 
-1. **Merchant integrations first** (supply side): a Solana Pay compatible checkout link and a Tempo settlement option. Target 10 design-partner merchants in travel and crypto commerce; each brings its own buyers.
+0. **Zero-integration start**: shoppers can already pay any Solana Pay USDC merchant in 4 by scanning its QR; the merchant sees a normal payment and pays nothing, the shopper carries the 1.5%. Every such sale is a lead: "your customers already pay you in 4 through HodlPay; take the fee off them and get a payment link."
+1. **Merchant integrations** (supply side): hosted payment links and a Tempo settlement option. Target 10 design-partner merchants in travel and crypto commerce; each brings its own buyers.
 2. **Wallet and payment-app partners**: HodlPay as a "Pay in 4" option inside wallets and card/payment apps that already hold user collateral.
 3. **Zcash community**: first venue to spend ZEC on credit; co-marketing with the Zenrock bridge.
 4. **LP side**: USDC holders earn merchant-fee yield that is uncorrelated with DeFi lending rates. Launch with a capped pool and grow the cap with repayment performance.
