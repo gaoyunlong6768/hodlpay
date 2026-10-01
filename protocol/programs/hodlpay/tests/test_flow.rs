@@ -6,8 +6,8 @@ use {
     },
     hodlpay::{
         constants::*,
-        state::{CreditProfile, Loan, Position},
-        AddAssetArgs, InitializeArgs,
+        state::{Config, CreditProfile, Loan, Position, Protocol},
+        AddAssetArgs, InitializeArgs, ProtocolArgs,
     },
     litesvm::LiteSVM,
     litesvm_token::{
@@ -144,13 +144,90 @@ fn setup_with(bytes: &[u8]) -> Env {
         .unwrap();
     }
 
+    send(
+        &mut svm,
+        ix(
+            hodlpay::instruction::InitProtocol { args: protocol_args(admin.pubkey(), 0, 0) },
+            hodlpay::accounts::InitProtocol {
+                admin: admin.pubkey(),
+                config,
+                protocol: pda(&[PROTOCOL_SEED]),
+                system_program: anchor_lang::system_program::ID,
+            },
+            &[],
+        ),
+        &[&admin],
+    )
+    .unwrap();
+
     let admin_usdc = CreateAssociatedTokenAccount::new(&mut svm, &admin, &usdc).send().unwrap();
     let admin_lp = CreateAssociatedTokenAccount::new(&mut svm, &admin, &pda(&[LP_MINT_SEED])).send().unwrap();
-    MintTo::new(&mut svm, &admin, &usdc, &admin_usdc, 100_000 * USDC).send().unwrap();
+    MintTo::new(&mut svm, &admin, &usdc, &admin_usdc, 200_000 * USDC).send().unwrap();
     let mut env = Env { svm, admin, admin_usdc, admin_lp, usdc, sol, zec };
     let admin = env.admin.insecure_clone();
     liquidity(&mut env, &admin, admin_usdc, admin_lp, 100_000 * USDC, true).unwrap();
     env
+}
+
+/// Treasury and reserve shares of fees; no beta caps.
+fn protocol_args(treasury: Pubkey, treasury_share_bps: u16, reserve_share_bps: u16) -> ProtocolArgs {
+    ProtocolArgs { treasury, treasury_share_bps, reserve_share_bps, max_loan: 0, max_total_debt: 0 }
+}
+
+fn set_protocol(env: &mut Env, args: ProtocolArgs) -> Result<(), String> {
+    let admin = env.admin.insecure_clone();
+    send(
+        &mut env.svm,
+        ix(
+            hodlpay::instruction::SetProtocol { args },
+            hodlpay::accounts::SetProtocol {
+                admin: admin.pubkey(),
+                config: pda(&[CONFIG_SEED]),
+                protocol: pda(&[PROTOCOL_SEED]),
+            },
+            &[],
+        ),
+        &[&admin],
+    )
+}
+
+fn fund_reserve(env: &mut Env, amount: u64) -> Result<(), String> {
+    let admin = env.admin.insecure_clone();
+    send(
+        &mut env.svm,
+        ix(
+            hodlpay::instruction::FundReserve { amount },
+            hodlpay::accounts::FundReserve {
+                funder: admin.pubkey(),
+                config: pda(&[CONFIG_SEED]),
+                protocol: pda(&[PROTOCOL_SEED]),
+                liquidity_vault: pda(&[LIQUIDITY_SEED]),
+                funder_usdc: env.admin_usdc,
+                token_program: anchor_spl::token::ID,
+            },
+            &[],
+        ),
+        &[&admin],
+    )
+}
+
+fn claim_revenue(env: &mut Env, signer: &Keypair, treasury_usdc: Pubkey, amount: u64) -> Result<(), String> {
+    send(
+        &mut env.svm,
+        ix(
+            hodlpay::instruction::ClaimRevenue { amount },
+            hodlpay::accounts::ClaimRevenue {
+                admin: signer.pubkey(),
+                config: pda(&[CONFIG_SEED]),
+                protocol: pda(&[PROTOCOL_SEED]),
+                liquidity_vault: pda(&[LIQUIDITY_SEED]),
+                treasury_usdc,
+                token_program: anchor_spl::token::ID,
+            },
+            &[],
+        ),
+        &[signer],
+    )
 }
 
 fn liquidity(env: &mut Env, provider: &Keypair, usdc: Pubkey, lp: Pubkey, amount: u64, deposit: bool) -> Result<(), String> {
@@ -162,6 +239,7 @@ fn liquidity(env: &mut Env, provider: &Keypair, usdc: Pubkey, lp: Pubkey, amount
         liquidity_vault: pda(&[LIQUIDITY_SEED]),
         lp_mint: pda(&[LP_MINT_SEED]),
         token_program: anchor_spl::token::ID,
+        protocol: pda(&[PROTOCOL_SEED]),
     };
     let i = if deposit {
         ix(hodlpay::instruction::DepositLiquidity { amount }, accounts, &[])
@@ -274,6 +352,7 @@ fn checkout_with(
                 system_program: anchor_lang::system_program::ID,
                 credit: credit_pda(&u.kp.pubkey()),
                 user_usdc,
+                protocol: pda(&[PROTOCOL_SEED]),
             },
             assets,
         ),
@@ -297,6 +376,7 @@ fn repay(env: &mut Env, u: &User, loan: Pubkey) -> Result<(), String> {
                 token_program: anchor_spl::token::ID,
                 credit: credit_pda(&u.kp.pubkey()),
                 system_program: anchor_lang::system_program::ID,
+                protocol: pda(&[PROTOCOL_SEED]),
             },
             &[],
         ),
@@ -337,6 +417,7 @@ fn liquidate(env: &mut Env, liquidator: &User, owner: &User, repay_amount: u64) 
                 liquidity_vault: pda(&[LIQUIDITY_SEED]),
                 token_program: anchor_spl::token::ID,
                 credit: credit_pda(&owner.kp.pubkey()),
+                protocol: pda(&[PROTOCOL_SEED]),
             },
             &[pda(&[ASSET_SEED, env.sol.as_ref()]), pda(&[ASSET_SEED, env.zec.as_ref()])],
         ),
@@ -361,6 +442,7 @@ fn collect_overdue(env: &mut Env, collector: &User, owner: &User, loan: Pubkey) 
                 liquidity_vault: pda(&[LIQUIDITY_SEED]),
                 token_program: anchor_spl::token::ID,
                 credit: credit_pda(&owner.kp.pubkey()),
+                protocol: pda(&[PROTOCOL_SEED]),
             },
             &[],
         ),
@@ -997,4 +1079,133 @@ fn mainnet_build_prices_from_pyth_only() {
     refresh(&mut env, sol, update).unwrap();
     let a: hodlpay::state::CollateralAsset = read(&env.svm, &pda(&[ASSET_SEED, sol.as_ref()]));
     assert_eq!(a.price_e6, 90 * USDC);
+}
+
+fn new_merchant(env: &mut Env) -> (Keypair, Pubkey) {
+    let merchant = Keypair::new();
+    let usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&merchant.pubkey())
+        .send()
+        .unwrap();
+    (merchant, usdc)
+}
+
+/// What LP shares are worth in total, as the program prices them.
+fn lp_value(env: &Env) -> u64 {
+    let c: Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    let p: Protocol = read(&env.svm, &pda(&[PROTOCOL_SEED]));
+    c.pool_value(balance(&env.svm, &pda(&[LIQUIDITY_SEED])), &p).unwrap()
+}
+
+#[test]
+fn fees_split_between_lps_treasury_and_reserve() {
+    let mut env = setup();
+    let treasury = Keypair::new();
+    let treasury_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&treasury.pubkey())
+        .send()
+        .unwrap();
+    set_protocol(&mut env, protocol_args(treasury.pubkey(), 2_000, 1_000)).unwrap();
+    assert!(set_protocol(&mut env, protocol_args(treasury.pubkey(), 4_000, 1_001)).is_err());
+
+    let alice = new_user(&mut env, 100 * SOL, 2_000 * USDC);
+    let (sol, sol_ata) = (env.sol, alice.sol_ata);
+    move_collateral(&mut env, &alice, sol, sol_ata, 100 * SOL, false).unwrap();
+    let (merchant, merchant_usdc) = new_merchant(&mut env);
+
+    // $1,000 purchase, 3% merchant fee: $7.50 of fee per installment, plus a 1% late fee on
+    // installment 2 ($2.50). Of each fee paid, 20% goes to the treasury and 10% to the reserve.
+    let loan = checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 1_000 * USDC).unwrap();
+    repay(&mut env, &alice, loan).unwrap();
+    advance(&mut env, 17 * DAY + 1);
+    repay(&mut env, &alice, loan).unwrap();
+    repay(&mut env, &alice, loan).unwrap();
+    repay(&mut env, &alice, loan).unwrap();
+
+    let p: Protocol = read(&env.svm, &pda(&[PROTOCOL_SEED]));
+    assert_eq!(p.treasury_balance, 6_500_000);
+    assert_eq!(p.reserve_balance, 3_250_000);
+    let c: Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    assert_eq!(c.fees_earned, 22_750_000);
+
+    // The only LP exits with principal plus its 70%; the treasury and reserve stay behind.
+    let (admin, admin_usdc, admin_lp) = (env.admin.insecure_clone(), env.admin_usdc, env.admin_lp);
+    assert_eq!(lp_value(&env), 100_022_750_000);
+    let before = balance(&env.svm, &admin_usdc);
+    liquidity(&mut env, &admin, admin_usdc, admin_lp, 100_000 * USDC, false).unwrap();
+    assert_eq!(balance(&env.svm, &admin_usdc) - before, 100_022_750_000);
+    assert_eq!(balance(&env.svm, &pda(&[LIQUIDITY_SEED])), 9_750_000);
+
+    // Only the admin claims, only to the treasury wallet, and only what was earned.
+    assert!(claim_revenue(&mut env, &alice.kp, treasury_usdc, 1).is_err());
+    assert!(claim_revenue(&mut env, &admin, alice.usdc_ata, 1).is_err());
+    assert!(claim_revenue(&mut env, &admin, treasury_usdc, 6_500_001).is_err());
+    claim_revenue(&mut env, &admin, treasury_usdc, 6_500_000).unwrap();
+    assert_eq!(balance(&env.svm, &treasury_usdc), 6_500_000);
+    let p: Protocol = read(&env.svm, &pda(&[PROTOCOL_SEED]));
+    assert_eq!((p.treasury_balance, p.treasury_earned, p.reserve_balance), (0, 6_500_000, 3_250_000));
+}
+
+#[test]
+fn reserve_absorbs_bad_debt_before_lps() {
+    // Same gap as `underwater_position_writes_off_bad_debt`: $219.05 of debt is left uncovered.
+    for reserve in [1_000 * USDC, 100 * USDC] {
+        let mut env = setup();
+        fund_reserve(&mut env, reserve).unwrap();
+        let erin = new_user(&mut env, 10 * SOL, 0);
+        let (sol, sol_ata) = (env.sol, erin.sol_ata);
+        move_collateral(&mut env, &erin, sol, sol_ata, 10 * SOL, false).unwrap();
+        let (merchant, merchant_usdc) = new_merchant(&mut env);
+        checkout(&mut env, &erin, &merchant.pubkey(), merchant_usdc, 600 * USDC).unwrap();
+
+        set_price(&mut env, sol, 40 * USDC);
+        let bob = new_user(&mut env, 0, 10_000 * USDC);
+        liquidate(&mut env, &bob, &erin, 300 * USDC).unwrap();
+        let before = lp_value(&env);
+        liquidate(&mut env, &bob, &erin, 150 * USDC).unwrap();
+
+        let p: Protocol = read(&env.svm, &pda(&[PROTOCOL_SEED]));
+        let bad_debt = p.bad_debt_covered + p.bad_debt_to_lps;
+        assert_eq!(bad_debt, 219_047_620);
+        let covered = bad_debt.min(reserve);
+        assert_eq!(p.bad_debt_covered, covered);
+        assert_eq!(p.reserve_balance, reserve - covered);
+        assert_eq!(before - lp_value(&env), bad_debt - covered);
+    }
+}
+
+#[test]
+fn beta_caps_and_protocol_funds_limit_checkouts() {
+    let mut env = setup();
+    let admin = env.admin.pubkey();
+    set_protocol(&mut env, ProtocolArgs { max_loan: 500 * USDC, max_total_debt: 800 * USDC, ..protocol_args(admin, 0, 0) }).unwrap();
+    let alice = new_user(&mut env, 100 * SOL, 0);
+    let (sol, sol_ata) = (env.sol, alice.sol_ata);
+    move_collateral(&mut env, &alice, sol, sol_ata, 100 * SOL, false).unwrap();
+    let (merchant, merchant_usdc) = new_merchant(&mut env);
+
+    let err = checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 501 * USDC).unwrap_err();
+    assert!(err.contains("OverLoanCap"), "{err}");
+    checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 500 * USDC).unwrap();
+    let err = checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 301 * USDC).unwrap_err();
+    assert!(err.contains("OverDebtCap"), "{err}");
+    checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 300 * USDC).unwrap();
+
+    // Without caps, the pool lends only what LPs own: $900 of reserve in the vault is not lendable.
+    set_protocol(&mut env, protocol_args(admin, 0, 0)).unwrap();
+    fund_reserve(&mut env, 900 * USDC).unwrap();
+    let lendable = balance(&env.svm, &pda(&[LIQUIDITY_SEED])) - 900 * USDC;
+    let (adm, admin_usdc, admin_lp) = (env.admin.insecure_clone(), env.admin_usdc, env.admin_lp);
+    let c: Config = read(&env.svm, &pda(&[CONFIG_SEED]));
+    let p: Protocol = read(&env.svm, &pda(&[PROTOCOL_SEED]));
+    let shares = ((lendable - 1_000 * USDC) as u128 * 100_000 * USDC as u128 / c.pool_value(lendable + 900 * USDC, &p).unwrap() as u128) as u64;
+    liquidity(&mut env, &adm, admin_usdc, admin_lp, shares, false).unwrap();
+    let idle = balance(&env.svm, &pda(&[LIQUIDITY_SEED])) - 900 * USDC;
+    assert!(idle >= 1_000 * USDC && idle < 1_001 * USDC, "{idle}");
+    // $1,100 would pay the merchant $1,067; $1,000 pays $970.
+    let err = checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 1_100 * USDC).unwrap_err();
+    assert!(err.contains("InsufficientLiquidity"), "{err}");
+    checkout(&mut env, &alice, &merchant.pubkey(), merchant_usdc, 1_000 * USDC).unwrap();
+    // LPs cannot withdraw the reserve either.
+    assert!(liquidity(&mut env, &adm, admin_usdc, admin_lp, 100 * USDC, false).is_err());
 }

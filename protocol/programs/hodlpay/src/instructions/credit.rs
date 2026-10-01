@@ -48,6 +48,8 @@ pub struct Checkout<'info> {
     /// `merchant_usdc` when shoppers finance a Solana Pay code to their own account.
     #[account(mut, dup, token::mint = config.usdc_mint, token::authority = owner)]
     pub user_usdc: Option<Box<Account<'info, TokenAccount>>>,
+    #[account(mut, seeds = [PROTOCOL_SEED], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
 }
 
 /// Remaining accounts: the `CollateralAsset` of every non-empty slot in the position.
@@ -83,8 +85,19 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
         .ok_or(ErrorCode::Overflow)?;
     require!(new_debt - first_cash <= v.borrow_limit, ErrorCode::InsufficientCredit);
 
+    let protocol = &ctx.accounts.protocol;
+    require!(protocol.max_loan == 0 || amount <= protocol.max_loan, ErrorCode::OverLoanCap);
+    require!(
+        protocol.max_total_debt == 0 || config.total_debt + amount <= protocol.max_total_debt,
+        ErrorCode::OverDebtCap
+    );
+
     let fee = apply_bps(amount, config.merchant_fee_bps);
     let merchant_received = amount - fee;
+    require!(
+        merchant_received <= ctx.accounts.liquidity_vault.amount.saturating_sub(protocol.held()),
+        ErrorCode::InsufficientLiquidity
+    );
     let seeds: &[&[u8]] = &[CONFIG_SEED, &[config.bump]];
     token::transfer(
         CpiContext::new_with_signer(
@@ -148,7 +161,7 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
             )?;
         }
         let a = &mut *ctx.accounts;
-        settle_installment(&mut a.config, &mut a.position, &mut a.loan, first, first_from_credit, 0);
+        settle_installment(&mut a.config, &mut a.protocol, &mut a.position, &mut a.loan, first, first_from_credit, 0);
         emit!(RepayEvent {
             owner: a.position.owner,
             loan: loan_key,
@@ -195,6 +208,8 @@ pub struct Repay<'info> {
     )]
     pub credit: Box<Account<'info, CreditProfile>>,
     pub system_program: Program<'info, System>,
+    #[account(mut, seeds = [PROTOCOL_SEED], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
 }
 
 /// Pays the next installment. Any credit left by a liquidation is applied first.
@@ -240,7 +255,7 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
 
     let config = &mut ctx.accounts.config;
     let loan = &mut ctx.accounts.loan;
-    settle_installment(config, p, loan, due, from_credit, late_fee);
+    settle_installment(config, &mut ctx.accounts.protocol, p, loan, due, from_credit, late_fee);
 
     emit!(RepayEvent {
         owner: p.owner,
@@ -255,8 +270,11 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
 
 /// Books one installment of `due` as paid, `from_credit` of it from liquidation
 /// credit and the rest in cash, and releases its share of the merchant fee.
+/// The treasury and reserve take their shares only of fees paid in cash; fees on
+/// credit-settled installments, which may come from written-off debt, stay with LPs.
 pub fn settle_installment(
     config: &mut Config,
+    protocol: &mut Protocol,
     p: &mut Position,
     loan: &mut Loan,
     due: u64,
@@ -267,9 +285,11 @@ pub fn settle_installment(
     p.credit_balance -= from_credit;
     p.debt = p.debt.saturating_sub(cash);
     let fee_earned = loan.fee_for(due);
+    let cash_fee = if due == 0 { 0 } else { ((fee_earned as u128) * cash as u128 / due as u128) as u64 };
+    let to_lps = protocol.take_shares(cash_fee + late_fee);
     config.total_debt = config.total_debt.saturating_sub(cash);
     config.unearned_fees = config.unearned_fees.saturating_sub(fee_earned);
-    config.fees_earned += fee_earned + late_fee;
+    config.fees_earned += fee_earned - cash_fee + to_lps;
 
     loan.installments_paid += 1;
     loan.repaid += due;

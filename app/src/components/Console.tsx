@@ -254,16 +254,28 @@ function Lend({
   const x = Number(amount);
   const pool = view?.pool;
   const mine = view ? view.lpShares * (pool?.sharePrice ?? 1) : 0;
+  const split = pool?.protocol;
+  const pct = (x: number) => `${+(x * 100).toFixed(1)}%`;
   return (
     <Card title="Lend" kicker="06 · liquidity pool">
       <p className="text-sm text-ink-soft">
-        LPs fund every purchase and earn the {PROTOCOL.merchantFeeBps / 100}% merchant fee
-        {view ? ` plus a ${view.lateFeeBps / 100}% late fee after a ${view.gracePeriodDays}-day grace period` : ""}.
+        LPs fund every purchase and earn{split ? ` ${pct(1 - split.treasuryShare - split.reserveShare)} of` : ""} the{" "}
+        {PROTOCOL.merchantFeeBps / 100}% merchant fee
+        {view ? ` plus late fees (${view.lateFeeBps / 100}% after a ${view.gracePeriodDays}-day grace period)` : ""}.
+        {split &&
+          ` ${pct(split.treasuryShare)} goes to the HodlPay treasury and ${pct(split.reserveShare)} to a first-loss reserve that covers bad debt before LPs lose anything.`}
       </p>
       <div className="dash mt-3 pt-2">
         <Row k="Pool value" v={pool ? usd(pool.value) : "—"} />
         <Row k="Lent out" v={pool ? `${usd(pool.debt)} · ${(pool.utilization * 100).toFixed(2)}%` : "—"} />
         <Row k="Fees earned by LPs" v={pool ? usd(pool.feesEarned) : "—"} />
+        {split && <Row k="Protocol revenue" v={usd(split.treasuryEarned)} />}
+        {split && (
+          <Row
+            k="First-loss reserve"
+            v={`${usd(split.reserve)}${split.badDebtCovered > 0 ? ` · covered ${usd(split.badDebtCovered)}` : ""}`}
+          />
+        )}
         <Row k="LP share price" v={pool ? `$${pool.sharePrice.toFixed(6)}` : "—"} strong />
         <Row k="Your position" v={view ? `${usd(mine)} · ${view.lpShares.toFixed(2)} shares` : "—"} />
       </div>

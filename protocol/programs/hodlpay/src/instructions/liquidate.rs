@@ -31,6 +31,8 @@ pub struct Liquidate<'info> {
     /// CHECK: the owner's `CreditProfile` PDA, reset if it exists.
     #[account(mut, seeds = [CREDIT_SEED, position.owner.as_ref()], bump)]
     pub credit: UncheckedAccount<'info>,
+    #[account(mut, seeds = [PROTOCOL_SEED], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
 }
 
 /// Repays up to `close_factor` of the debt and seizes collateral worth
@@ -106,14 +108,17 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, repay_amount: u64) -> Result<()
     let config = &mut ctx.accounts.config;
     config.total_debt = config.total_debt.saturating_sub(repay);
 
-    // No collateral left: write the shortfall off as pool bad debt so LP share
-    // price stops counting it. The written-off amount still settles the
-    // remaining installments through `credit_balance`, so the loans can close.
+    // No collateral left: write the shortfall off so LP share price stops counting
+    // it. The reserve covers it first, LPs only the rest. The written-off amount
+    // still settles the remaining installments through `credit_balance`, so the
+    // loans can close.
     let bad_debt = if p.amounts.iter().all(|&a| a == 0) { p.debt } else { 0 };
+    let mut reserve_covered = 0;
     if bad_debt > 0 {
         config.total_debt = config.total_debt.saturating_sub(bad_debt);
         p.credit_balance += bad_debt;
         p.debt = 0;
+        reserve_covered = ctx.accounts.protocol.absorb_bad_debt(bad_debt);
     }
     reset_credit(&ctx.accounts.credit, ctx.program_id)?;
 
@@ -124,6 +129,7 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, repay_amount: u64) -> Result<()
         repaid: repay,
         seized: seize,
         bad_debt,
+        reserve_covered,
     });
     Ok(())
 }
@@ -157,6 +163,8 @@ pub struct CollectOverdue<'info> {
     /// CHECK: the owner's `CreditProfile` PDA, reset if it exists.
     #[account(mut, seeds = [CREDIT_SEED, position.owner.as_ref()], bump)]
     pub credit: UncheckedAccount<'info>,
+    #[account(mut, seeds = [PROTOCOL_SEED], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
 }
 
 /// Settles an installment the borrower left unpaid past the grace period, from
@@ -225,7 +233,7 @@ pub fn handle_collect_overdue(ctx: Context<CollectOverdue>) -> Result<()> {
     let config = &mut ctx.accounts.config;
     let p = &mut ctx.accounts.position;
     let loan = &mut ctx.accounts.loan;
-    settle_installment(config, p, loan, due, from_credit, late_fee);
+    settle_installment(config, &mut ctx.accounts.protocol, p, loan, due, from_credit, late_fee);
 
     emit!(OverdueCollectedEvent {
         owner: p.owner,

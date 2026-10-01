@@ -17,6 +17,8 @@ pub struct ProvideLiquidity<'info> {
     #[account(mut, address = config.lp_mint)]
     pub lp_mint: Box<Account<'info, Mint>>,
     pub token_program: Program<'info, Token>,
+    #[account(seeds = [PROTOCOL_SEED], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
 }
 
 fn mul_div(a: u64, b: u64, c: u64) -> Result<u64> {
@@ -29,7 +31,10 @@ fn mul_div(a: u64, b: u64, c: u64) -> Result<u64> {
 pub fn handle_deposit_liquidity(ctx: Context<ProvideLiquidity>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::ZeroAmount);
     let supply = ctx.accounts.lp_mint.supply;
-    let value = ctx.accounts.config.pool_value(ctx.accounts.liquidity_vault.amount)?;
+    let value = ctx
+        .accounts
+        .config
+        .pool_value(ctx.accounts.liquidity_vault.amount, &ctx.accounts.protocol)?;
     let shares = if supply == 0 || value == 0 { amount } else { mul_div(amount, supply, value)? };
     require!(shares > 0, ErrorCode::ZeroAmount);
 
@@ -68,9 +73,10 @@ pub fn handle_withdraw_liquidity(ctx: Context<ProvideLiquidity>, shares: u64) ->
     require!(shares > 0, ErrorCode::ZeroAmount);
     let supply = ctx.accounts.lp_mint.supply;
     let idle = ctx.accounts.liquidity_vault.amount;
-    let amount = mul_div(shares, ctx.accounts.config.pool_value(idle)?, supply)?;
+    let protocol = &ctx.accounts.protocol;
+    let amount = mul_div(shares, ctx.accounts.config.pool_value(idle, protocol)?, supply)?;
     require!(amount > 0, ErrorCode::ZeroAmount);
-    require!(amount <= idle, ErrorCode::InsufficientLiquidity);
+    require!(amount <= idle.saturating_sub(protocol.held()), ErrorCode::InsufficientLiquidity);
 
     token::burn(
         CpiContext::new(

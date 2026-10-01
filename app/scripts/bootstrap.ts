@@ -56,17 +56,21 @@ async function main() {
   }
 
   const deploymentFile = path.join(process.cwd(), "src/lib/hodlpay/deployment.json");
+  // Re-running on the same cluster keeps fields set later (public RPC, launch time, Tempo bridge).
+  const existing = existsSync(deploymentFile) ? JSON.parse(readFileSync(deploymentFile, "utf8")) : {};
+  const kept = existing.cluster === cluster ? existing : {};
   writeFileSync(
     deploymentFile,
     JSON.stringify(
       {
         cluster,
-        rpc: process.env.NEXT_PUBLIC_RPC ?? rpc,
+        rpc: process.env.NEXT_PUBLIC_RPC ?? kept.rpc ?? rpc,
         programId: idl.address,
         usdcMint: usdcMint.toBase58(),
         zecMint: zecMint.toBase58(),
         solMint: NATIVE_MINT.toBase58(),
-        tempoBridge: admin.publicKey.toBase58(),
+        tempoBridge: kept.tempoBridge ?? admin.publicKey.toBase58(),
+        ...(kept.launchedAt ? { launchedAt: kept.launchedAt } : {}),
       },
       null,
       2,
@@ -134,10 +138,46 @@ async function main() {
     console.log(`added collateral ${label} @ $${price}`);
   }
 
+  // Revenue split and beta limits. On mainnet set TREASURY to a multisig and the caps, e.g.
+  // MAX_LOAN_USDC=500 MAX_TOTAL_DEBT_USDC=10000.
+  const adminUsdc = await getOrCreateAssociatedTokenAccount(conn, admin, usdcMint, admin.publicKey);
+  const protocolArgs = {
+    treasury: new PublicKey(process.env.TREASURY ?? admin.publicKey.toBase58()),
+    treasuryShareBps: Number(process.env.TREASURY_SHARE_BPS ?? 2_000),
+    reserveShareBps: Number(process.env.RESERVE_SHARE_BPS ?? 1_000),
+    maxLoan: hp.toUnits(Number(process.env.MAX_LOAN_USDC ?? 0), 6),
+    maxTotalDebt: hp.toUnits(Number(process.env.MAX_TOTAL_DEBT_USDC ?? 0), 6),
+  };
+  const protocolAccounts = { admin: admin.publicKey, config: hp.pdas.config(), protocol: hp.pdas.protocol() };
+  if (!(await conn.getAccountInfo(hp.pdas.protocol()))) {
+    await p.methods.initProtocol(protocolArgs).accountsPartial(protocolAccounts).rpc();
+    console.log("initialized protocol revenue split");
+  } else {
+    await p.methods.setProtocol(protocolArgs).accountsPartial(protocolAccounts).rpc();
+  }
+  console.log(
+    `fees: ${protocolArgs.treasuryShareBps / 100}% treasury, ${protocolArgs.reserveShareBps / 100}% reserve; ` +
+      `caps: loan ${process.env.MAX_LOAN_USDC ?? "none"}, total debt ${process.env.MAX_TOTAL_DEBT_USDC ?? "none"}`,
+  );
+  const reserveSeed = Number(process.env.RESERVE_USDC ?? 0);
+  if (reserveSeed > 0 && (await p.account.protocol.fetch(hp.pdas.protocol())).reserveFunded.isZero()) {
+    if (!process.env.USDC_MINT) await mintTo(conn, admin, usdcMint, adminUsdc.address, admin, BigInt(reserveSeed * 1e6));
+    await p.methods
+      .fundReserve(hp.toUnits(reserveSeed, 6))
+      .accountsPartial({
+        funder: admin.publicKey,
+        config: hp.pdas.config(),
+        protocol: hp.pdas.protocol(),
+        liquidityVault: hp.pdas.liquidity(),
+        funderUsdc: adminUsdc.address,
+      })
+      .rpc();
+    console.log(`seeded the first-loss reserve with ${reserveSeed} USDC`);
+  }
+
   const liquidity = Number(process.env.LIQUIDITY_USDC ?? 1_000_000);
   const vault = await conn.getTokenAccountBalance(hp.pdas.liquidity());
   if (Number(vault.value.uiAmount) < liquidity / 2) {
-    const adminUsdc = await getOrCreateAssociatedTokenAccount(conn, admin, usdcMint, admin.publicKey);
     if (!process.env.USDC_MINT) await mintTo(conn, admin, usdcMint, adminUsdc.address, admin, BigInt(liquidity * 1e6));
     await send(p, hp.tx(...(await hp.buildLpDeposit(p, admin.publicKey, liquidity))));
     console.log(`deposited ${liquidity} USDC as the first liquidity provider`);

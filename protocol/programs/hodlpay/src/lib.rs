@@ -79,4 +79,20 @@ pub mod hodlpay {
     pub fn check_health(ctx: Context<CheckHealth>) -> Result<()> {
         liquidate::handle_check_health(ctx)
     }
+
+    pub fn init_protocol(ctx: Context<InitProtocol>, args: ProtocolArgs) -> Result<()> {
+        protocol::handle_init_protocol(ctx, args)
+    }
+
+    pub fn set_protocol(ctx: Context<SetProtocol>, args: ProtocolArgs) -> Result<()> {
+        protocol::handle_set_protocol(ctx, args)
+    }
+
+    pub fn claim_revenue(ctx: Context<ClaimRevenue>, amount: u64) -> Result<()> {
+        protocol::handle_claim_revenue(ctx, amount)
+    }
+
+    pub fn fund_reserve(ctx: Context<FundReserve>, amount: u64) -> Result<()> {
+        protocol::handle_fund_reserve(ctx, amount)
+    }
 }

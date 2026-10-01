@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{constants::*, error::ErrorCode};
+use crate::{constants::*, error::ErrorCode, math::apply_bps};
 
 #[account]
 #[derive(InitSpace)]
@@ -33,10 +33,67 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn pool_value(&self, idle: u64) -> Result<u64> {
-        idle.checked_add(self.total_debt)
+    /// LP-owned value: idle liquidity not held for the protocol, plus outstanding debt.
+    pub fn pool_value(&self, idle: u64, protocol: &Protocol) -> Result<u64> {
+        idle.checked_sub(protocol.held())
+            .and_then(|v| v.checked_add(self.total_debt))
             .and_then(|v| v.checked_sub(self.unearned_fees))
             .ok_or(error!(ErrorCode::Overflow))
+    }
+}
+
+/// Protocol economics and beta limits, kept out of `Config` so its layout never changes.
+/// Treasury revenue and the reserve sit in the liquidity vault but belong to the
+/// protocol: they are excluded from pool value and never lent out.
+#[account]
+#[derive(InitSpace)]
+pub struct Protocol {
+    /// Owner of the USDC account revenue is claimed to.
+    pub treasury: Pubkey,
+    /// Share of fees paid in cash that goes to the treasury.
+    pub treasury_share_bps: u16,
+    /// Share of fees paid in cash that funds the bad-debt reserve.
+    pub reserve_share_bps: u16,
+    /// Claimable treasury revenue.
+    pub treasury_balance: u64,
+    /// First-loss reserve: written-off debt is covered from here before LPs lose anything.
+    pub reserve_balance: u64,
+    pub treasury_earned: u64,
+    /// Lifetime inflow to the reserve: fee shares plus direct funding.
+    pub reserve_funded: u64,
+    pub bad_debt_covered: u64,
+    pub bad_debt_to_lps: u64,
+    /// Largest single purchase; 0 means no cap.
+    pub max_loan: u64,
+    /// Ceiling on total outstanding debt; 0 means no cap.
+    pub max_total_debt: u64,
+    pub bump: u8,
+    pub reserved: [u8; 64],
+}
+
+impl Protocol {
+    pub fn held(&self) -> u64 {
+        self.treasury_balance + self.reserve_balance
+    }
+
+    /// Splits `income` paid in cash; returns the part left to LPs.
+    pub fn take_shares(&mut self, income: u64) -> u64 {
+        let to_treasury = apply_bps(income, self.treasury_share_bps);
+        let to_reserve = apply_bps(income, self.reserve_share_bps);
+        self.treasury_balance += to_treasury;
+        self.treasury_earned += to_treasury;
+        self.reserve_balance += to_reserve;
+        self.reserve_funded += to_reserve;
+        income - to_treasury - to_reserve
+    }
+
+    /// Covers written-off debt from the reserve first; returns the part covered.
+    pub fn absorb_bad_debt(&mut self, bad_debt: u64) -> u64 {
+        let covered = bad_debt.min(self.reserve_balance);
+        self.reserve_balance -= covered;
+        self.bad_debt_covered += covered;
+        self.bad_debt_to_lps += bad_debt - covered;
+        covered
     }
 }
 
@@ -232,4 +289,15 @@ pub struct LiquidationEvent {
     pub seized: u64,
     /// Debt written off because the position has no collateral left.
     pub bad_debt: u64,
+    /// Part of `bad_debt` covered by the protocol reserve instead of LPs.
+    pub reserve_covered: u64,
+}
+
+#[event]
+pub struct RevenueEvent {
+    pub treasury_balance: u64,
+    pub reserve_balance: u64,
+    /// Claimed to the treasury (`claimed`) or paid into the reserve (`funded`).
+    pub amount: u64,
+    pub claimed: bool,
 }

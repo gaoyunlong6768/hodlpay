@@ -91,6 +91,7 @@ export const pdas = {
     return pda([seed("loan"), position.toBuffer(), b]);
   },
   credit: (owner: PublicKey) => pda([seed("credit"), owner.toBuffer()]),
+  protocol: () => pda([seed("protocol")]),
 };
 
 export const ata = (mint: PublicKey, owner: PublicKey) =>
@@ -399,19 +400,45 @@ export interface PoolStats {
   /** Merchant fees on open loans, credited to LPs as installments are repaid. */
   unearned: number;
   utilization: number;
+  /** Protocol split of fees paid in cash and its first-loss reserve. */
+  protocol: {
+    treasuryShare: number;
+    reserveShare: number;
+    treasury: number;
+    treasuryEarned: number;
+    reserve: number;
+    badDebtCovered: number;
+    badDebtToLps: number;
+    /** 0 means no cap. */
+    maxLoan: number;
+    maxTotalDebt: number;
+  } | null;
 }
 
 export async function fetchPool(p: HodlpayProgram): Promise<PoolStats> {
   const conn = p.provider.connection;
-  const [c, idle, supply] = await Promise.all([
+  const [c, idle, supply, pr] = await Promise.all([
     p.account.config.fetch(pdas.config()),
     conn.getTokenAccountBalance(pdas.liquidity()),
     conn.getTokenSupply(pdas.lpMint()),
+    p.account.protocol.fetchNullable(pdas.protocol()),
   ]);
-  const i = Number(idle.value.uiAmount ?? 0);
-  const debt = fromUnits(c.totalDebt, USDC_DECIMALS);
+  const usdc = (v: BN) => fromUnits(v, USDC_DECIMALS);
+  const protocol = pr && {
+    treasuryShare: pr.treasuryShareBps / 10_000,
+    reserveShare: pr.reserveShareBps / 10_000,
+    treasury: usdc(pr.treasuryBalance),
+    treasuryEarned: usdc(pr.treasuryEarned),
+    reserve: usdc(pr.reserveBalance),
+    badDebtCovered: usdc(pr.badDebtCovered),
+    badDebtToLps: usdc(pr.badDebtToLps),
+    maxLoan: usdc(pr.maxLoan),
+    maxTotalDebt: usdc(pr.maxTotalDebt),
+  };
+  const i = Number(idle.value.uiAmount ?? 0) - (protocol ? protocol.treasury + protocol.reserve : 0);
+  const debt = usdc(c.totalDebt);
   const shares = Number(supply.value.uiAmount ?? 0);
-  const unearned = fromUnits(c.unearnedFees, USDC_DECIMALS);
+  const unearned = usdc(c.unearnedFees);
   const value = i + debt - unearned;
   return {
     idle: i,
@@ -419,9 +446,10 @@ export async function fetchPool(p: HodlpayProgram): Promise<PoolStats> {
     value,
     shares,
     sharePrice: shares ? value / shares : 1,
-    feesEarned: fromUnits(c.feesEarned, USDC_DECIMALS),
+    feesEarned: usdc(c.feesEarned),
     unearned,
     utilization: value ? (debt - unearned) / value : 0,
+    protocol,
   };
 }
 

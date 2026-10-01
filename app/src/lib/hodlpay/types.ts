@@ -329,6 +329,106 @@ export type Hodlpay = {
           ],
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claimRevenue",
+      "discriminator": [
+        4,
+        22,
+        151,
+        70,
+        183,
+        79,
+        73,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "liquidityVault",
+          "writable": true
+        },
+        {
+          "name": "treasuryUsdc",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": [
@@ -495,6 +595,27 @@ export type Hodlpay = {
                 "kind": "account",
                 "path": "position.owner",
                 "account": "position"
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
               }
             ]
           }
@@ -684,12 +805,184 @@ export type Hodlpay = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "protocol",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
         {
           "name": "amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "fundReserve",
+      "discriminator": [
+        17,
+        82,
+        71,
+        222,
+        117,
+        210,
+        58,
+        12
+      ],
+      "accounts": [
+        {
+          "name": "funder",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "liquidityVault",
+          "writable": true
+        },
+        {
+          "name": "funderUsdc",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initProtocol",
+      "discriminator": [
+        3,
+        188,
+        141,
+        237,
+        225,
+        226,
+        232,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "protocolArgs"
+            }
+          }
         }
       ]
     },
@@ -923,6 +1216,27 @@ export type Hodlpay = {
                 "kind": "account",
                 "path": "position.owner",
                 "account": "position"
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
               }
             ]
           }
@@ -1177,6 +1491,27 @@ export type Hodlpay = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -1272,6 +1607,77 @@ export type Hodlpay = {
         {
           "name": "merchantFeeBps",
           "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "setProtocol",
+      "discriminator": [
+        237,
+        211,
+        119,
+        113,
+        86,
+        142,
+        137,
+        44
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "protocolArgs"
+            }
+          }
         }
       ]
     },
@@ -1526,6 +1932,26 @@ export type Hodlpay = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "protocol",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -1600,6 +2026,19 @@ export type Hodlpay = {
         64,
         247,
         208
+      ]
+    },
+    {
+      "name": "protocol",
+      "discriminator": [
+        45,
+        39,
+        101,
+        43,
+        115,
+        72,
+        131,
+        40
       ]
     }
   ],
@@ -1680,6 +2119,19 @@ export type Hodlpay = {
         108,
         82,
         140
+      ]
+    },
+    {
+      "name": "revenueEvent",
+      "discriminator": [
+        32,
+        245,
+        236,
+        55,
+        1,
+        58,
+        107,
+        60
       ]
     }
   ],
@@ -1788,6 +2240,21 @@ export type Hodlpay = {
       "code": 6020,
       "name": "keeperPricesDisabled",
       "msg": "Keeper prices are disabled in this build; use refresh_price"
+    },
+    {
+      "code": 6021,
+      "name": "overLoanCap",
+      "msg": "Purchase is above the per-loan limit"
+    },
+    {
+      "code": 6022,
+      "name": "overDebtCap",
+      "msg": "Protocol is at its total debt limit"
+    },
+    {
+      "code": 6023,
+      "name": "exceedsTreasury",
+      "msg": "Amount exceeds the treasury balance"
     }
   ],
   "types": [
@@ -2131,6 +2598,13 @@ export type Hodlpay = {
               "Debt written off because the position has no collateral left."
             ],
             "type": "u64"
+          },
+          {
+            "name": "reserveCovered",
+            "docs": [
+              "Part of `bad_debt` covered by the protocol reserve instead of LPs."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -2354,6 +2828,128 @@ export type Hodlpay = {
       }
     },
     {
+      "name": "protocol",
+      "docs": [
+        "Protocol economics and beta limits, kept out of `Config` so its layout never changes.",
+        "Treasury revenue and the reserve sit in the liquidity vault but belong to the",
+        "protocol: they are excluded from pool value and never lent out."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "treasury",
+            "docs": [
+              "Owner of the USDC account revenue is claimed to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "treasuryShareBps",
+            "docs": [
+              "Share of fees paid in cash that goes to the treasury."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "reserveShareBps",
+            "docs": [
+              "Share of fees paid in cash that funds the bad-debt reserve."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "treasuryBalance",
+            "docs": [
+              "Claimable treasury revenue."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserveBalance",
+            "docs": [
+              "First-loss reserve: written-off debt is covered from here before LPs lose anything."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "treasuryEarned",
+            "type": "u64"
+          },
+          {
+            "name": "reserveFunded",
+            "docs": [
+              "Lifetime inflow to the reserve: fee shares plus direct funding."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "badDebtCovered",
+            "type": "u64"
+          },
+          {
+            "name": "badDebtToLps",
+            "type": "u64"
+          },
+          {
+            "name": "maxLoan",
+            "docs": [
+              "Largest single purchase; 0 means no cap."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "maxTotalDebt",
+            "docs": [
+              "Ceiling on total outstanding debt; 0 means no cap."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "protocolArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasuryShareBps",
+            "type": "u16"
+          },
+          {
+            "name": "reserveShareBps",
+            "type": "u16"
+          },
+          {
+            "name": "maxLoan",
+            "type": "u64"
+          },
+          {
+            "name": "maxTotalDebt",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "repayEvent",
       "type": {
         "kind": "struct",
@@ -2381,6 +2977,33 @@ export type Hodlpay = {
           {
             "name": "lateFee",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "revenueEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "treasuryBalance",
+            "type": "u64"
+          },
+          {
+            "name": "reserveBalance",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Claimed to the treasury (`claimed`) or paid into the reserve (`funded`)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "claimed",
+            "type": "bool"
           }
         ]
       }
@@ -2461,9 +3084,22 @@ export type Hodlpay = {
       "value": "[108, 112, 95, 109, 105, 110, 116]"
     },
     {
+      "name": "maxProtocolShareBps",
+      "docs": [
+        "Treasury plus reserve share of fees; LPs always keep at least the rest."
+      ],
+      "type": "u16",
+      "value": "5000"
+    },
+    {
       "name": "positionSeed",
       "type": "bytes",
       "value": "[112, 111, 115, 105, 116, 105, 111, 110]"
+    },
+    {
+      "name": "protocolSeed",
+      "type": "bytes",
+      "value": "[112, 114, 111, 116, 111, 99, 111, 108]"
     }
   ]
 };

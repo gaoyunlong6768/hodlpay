@@ -24,6 +24,13 @@ pub const LP_MINT_SEED: &[u8] = b"lp_mint";
 #[constant]
 pub const CREDIT_SEED: &[u8] = b"credit";
 
+#[constant]
+pub const PROTOCOL_SEED: &[u8] = b"protocol";
+
+/// Treasury plus reserve share of fees; LPs always keep at least the rest.
+#[constant]
+pub const MAX_PROTOCOL_SHARE_BPS: u16 = 5_000;
+
 /// USDC (base units) repaid on time per credit level.
 #[constant]
 pub const CREDIT_STEP: u64 = 250_000_000;

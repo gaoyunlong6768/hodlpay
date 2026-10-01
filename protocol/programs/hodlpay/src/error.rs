@@ -44,4 +44,10 @@ pub enum ErrorCode {
     NotOverdue,
     #[msg("Keeper prices are disabled in this build; use refresh_price")]
     KeeperPricesDisabled,
+    #[msg("Purchase is above the per-loan limit")]
+    OverLoanCap,
+    #[msg("Protocol is at its total debt limit")]
+    OverDebtCap,
+    #[msg("Amount exceeds the treasury balance")]
+    ExceedsTreasury,
 }

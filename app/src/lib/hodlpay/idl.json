@@ -323,6 +323,106 @@
           ],
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claim_revenue",
+      "discriminator": [
+        4,
+        22,
+        151,
+        70,
+        183,
+        79,
+        73,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "liquidity_vault",
+          "writable": true
+        },
+        {
+          "name": "treasury_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": [
@@ -489,6 +589,27 @@
                 "kind": "account",
                 "path": "position.owner",
                 "account": "Position"
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
               }
             ]
           }
@@ -678,12 +799,184 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "protocol",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
         {
           "name": "amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "fund_reserve",
+      "discriminator": [
+        17,
+        82,
+        71,
+        222,
+        117,
+        210,
+        58,
+        12
+      ],
+      "accounts": [
+        {
+          "name": "funder",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "liquidity_vault",
+          "writable": true
+        },
+        {
+          "name": "funder_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "init_protocol",
+      "discriminator": [
+        3,
+        188,
+        141,
+        237,
+        225,
+        226,
+        232,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "ProtocolArgs"
+            }
+          }
         }
       ]
     },
@@ -917,6 +1210,27 @@
                 "kind": "account",
                 "path": "position.owner",
                 "account": "Position"
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
               }
             ]
           }
@@ -1171,6 +1485,27 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -1266,6 +1601,77 @@
         {
           "name": "merchant_fee_bps",
           "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "set_protocol",
+      "discriminator": [
+        237,
+        211,
+        119,
+        113,
+        86,
+        142,
+        137,
+        44
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "protocol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "ProtocolArgs"
+            }
+          }
         }
       ]
     },
@@ -1520,6 +1926,26 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "protocol",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  116,
+                  111,
+                  99,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -1594,6 +2020,19 @@
         64,
         247,
         208
+      ]
+    },
+    {
+      "name": "Protocol",
+      "discriminator": [
+        45,
+        39,
+        101,
+        43,
+        115,
+        72,
+        131,
+        40
       ]
     }
   ],
@@ -1674,6 +2113,19 @@
         108,
         82,
         140
+      ]
+    },
+    {
+      "name": "RevenueEvent",
+      "discriminator": [
+        32,
+        245,
+        236,
+        55,
+        1,
+        58,
+        107,
+        60
       ]
     }
   ],
@@ -1782,6 +2234,21 @@
       "code": 6020,
       "name": "KeeperPricesDisabled",
       "msg": "Keeper prices are disabled in this build; use refresh_price"
+    },
+    {
+      "code": 6021,
+      "name": "OverLoanCap",
+      "msg": "Purchase is above the per-loan limit"
+    },
+    {
+      "code": 6022,
+      "name": "OverDebtCap",
+      "msg": "Protocol is at its total debt limit"
+    },
+    {
+      "code": 6023,
+      "name": "ExceedsTreasury",
+      "msg": "Amount exceeds the treasury balance"
     }
   ],
   "types": [
@@ -2125,6 +2592,13 @@
               "Debt written off because the position has no collateral left."
             ],
             "type": "u64"
+          },
+          {
+            "name": "reserve_covered",
+            "docs": [
+              "Part of `bad_debt` covered by the protocol reserve instead of LPs."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -2348,6 +2822,128 @@
       }
     },
     {
+      "name": "Protocol",
+      "docs": [
+        "Protocol economics and beta limits, kept out of `Config` so its layout never changes.",
+        "Treasury revenue and the reserve sit in the liquidity vault but belong to the",
+        "protocol: they are excluded from pool value and never lent out."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "treasury",
+            "docs": [
+              "Owner of the USDC account revenue is claimed to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_share_bps",
+            "docs": [
+              "Share of fees paid in cash that goes to the treasury."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "reserve_share_bps",
+            "docs": [
+              "Share of fees paid in cash that funds the bad-debt reserve."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "treasury_balance",
+            "docs": [
+              "Claimable treasury revenue."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserve_balance",
+            "docs": [
+              "First-loss reserve: written-off debt is covered from here before LPs lose anything."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "treasury_earned",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_funded",
+            "docs": [
+              "Lifetime inflow to the reserve: fee shares plus direct funding."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bad_debt_covered",
+            "type": "u64"
+          },
+          {
+            "name": "bad_debt_to_lps",
+            "type": "u64"
+          },
+          {
+            "name": "max_loan",
+            "docs": [
+              "Largest single purchase; 0 means no cap."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_total_debt",
+            "docs": [
+              "Ceiling on total outstanding debt; 0 means no cap."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProtocolArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_share_bps",
+            "type": "u16"
+          },
+          {
+            "name": "reserve_share_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_loan",
+            "type": "u64"
+          },
+          {
+            "name": "max_total_debt",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "RepayEvent",
       "type": {
         "kind": "struct",
@@ -2375,6 +2971,33 @@
           {
             "name": "late_fee",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RevenueEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "treasury_balance",
+            "type": "u64"
+          },
+          {
+            "name": "reserve_balance",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Claimed to the treasury (`claimed`) or paid into the reserve (`funded`)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "claimed",
+            "type": "bool"
           }
         ]
       }
@@ -2455,9 +3078,22 @@
       "value": "[108, 112, 95, 109, 105, 110, 116]"
     },
     {
+      "name": "MAX_PROTOCOL_SHARE_BPS",
+      "docs": [
+        "Treasury plus reserve share of fees; LPs always keep at least the rest."
+      ],
+      "type": "u16",
+      "value": "5000"
+    },
+    {
       "name": "POSITION_SEED",
       "type": "bytes",
       "value": "[112, 111, 115, 105, 116, 105, 111, 110]"
+    },
+    {
+      "name": "PROTOCOL_SEED",
+      "type": "bytes",
+      "value": "[112, 114, 111, 116, 111, 99, 111, 108]"
     }
   ]
 }
