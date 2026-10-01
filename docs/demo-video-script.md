@@ -46,7 +46,7 @@ Pick Bluebottle, switch the rail to Tempo, check out. Click the Tempo transactio
 **1:48 – 2:05 · A missed payment, for real**
 
 Scroll to Purchases: Coffee beans and Coffee subscription, each marked "Installment 1 collected from collateral". Click the ledger line "Installment #1 … was overdue: the keeper paid …" to open the transaction.
-"I skipped these two payments on purpose. Three days later, our hourly keeper collected exactly those installments from my collateral, plus a 1% late fee. No debt collectors, no bad debt, and my credit level reset."
+"I skipped these two payments on purpose. The moment the three-day grace period ended, our keeper collected exactly those installments from my collateral, plus a 1% late fee. No debt collectors, no bad debt, and my credit level reset."
 
 **2:05 – 2:35 · Crash test**
 
