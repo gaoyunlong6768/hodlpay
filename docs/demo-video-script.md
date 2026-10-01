@@ -30,7 +30,7 @@ Back on `/merchant`, press refresh: the sale appears with the amount received.
 
 **0:48 – 1:05 · Pay on time, earn a higher limit**
 
-Back in the console, repay the next Kinfolk installment ($310). It is due in two weeks, so the ledger says "Paid early, so no credit for it…" and the row shows "credit from …". Then switch the console to **Simulation**, press **+14 days**, repay: the ledger shows "Credit level 1 of 4" and the On-time credit bar fills.
+Back in the console, repay the next Kinfolk installment ($310). It is due in two weeks, so the ledger says "Paid early, so no credit for it…" and the row shows "credit from …". Then switch the console to **Simulation**, lock 25 SOL, buy the Walnut desk ($1,240), press **+14 days** and repay the $310 now due: the ledger shows "Credit level 1 of 4" and the On-time credit bar fills.
 "Prepaying is always free, but only payments in the week before a due date build credit, so nobody can buy a record in one sitting. Every $250 paid on time raises my max loan-to-value by 2.5 points, up to 10. The record lives on-chain, tied to the wallet, not to my name."
 
 **1:05 – 1:28 · Any Solana Pay merchant, no integration**
