@@ -10,6 +10,7 @@ import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, type 
 import {
   BN,
   DEPLOYMENT,
+  IS_MAINNET,
   MINTS,
   PYTH_FEEDS,
   PYTH_RECEIVER_ID,
@@ -107,15 +108,18 @@ async function freshPythFeeds(p: HodlpayProgram, maxAge: number) {
 /**
  * Updates every collateral price. Assets with a fresh Pyth sponsored feed use the
  * permissionless `refresh_price`; the rest (and all assets while a demo stress
- * shock is active) get a keeper-posted price.
+ * shock is active) get a keeper-posted price. The mainnet build only accepts Pyth.
  */
 export async function postPrices(shock = getShock()) {
+  if (IS_MAINNET && shock !== 0) throw new Error("Stress tests are disabled on mainnet");
   const { program: p, admin } = adminProgram();
   const quote = await getPrices();
   const cfg = await fetchConfig(p);
   const pyth = shock === 0 ? await freshPythFeeds(p, cfg.maxPriceAge) : new Map<CollateralId, PublicKey>();
+  const ids = (Object.keys(MINTS) as CollateralId[]).filter((id) => !IS_MAINNET || pyth.has(id));
+  if (!ids.length) return { sig: null, source: "pyth-onchain (no newer update)", shock, prices: quote.prices };
   const ixs = await Promise.all(
-    (Object.keys(MINTS) as CollateralId[]).map((id) => {
+    ids.map((id) => {
       const feed = pyth.get(id);
       if (feed) return buildRefreshPrice(p, id, feed);
       return p.methods
@@ -134,6 +138,7 @@ const FAUCET_RESERVE_SOL = Number(process.env.FAUCET_RESERVE_SOL ?? 1);
 
 /** Sends demo funds: test USDC, test zenZEC and (on localnet) SOL. */
 export async function faucet(wallet: PublicKey) {
+  if (IS_MAINNET) throw new Error("There is no faucet on mainnet");
   const { program: p, admin } = adminProgram();
   const conn = p.provider.connection;
   if (DEPLOYMENT.cluster !== "localnet" && (await conn.getBalance(admin.publicKey)) < FAUCET_RESERVE_SOL * LAMPORTS_PER_SOL) {
@@ -225,7 +230,7 @@ export async function liquidatePosition(h: Health) {
   const units = new BN(Math.floor(repay * 10 ** USDC_DECIMALS).toString());
   const t = tx(
     createAssociatedTokenAccountIdempotentInstruction(admin.publicKey, usdcAta, admin.publicKey, USDC_MINT),
-    createMintToInstruction(USDC_MINT, usdcAta, admin.publicKey, BigInt(units.toString())),
+    ...(IS_MAINNET ? [] : [createMintToInstruction(USDC_MINT, usdcAta, admin.publicKey, BigInt(units.toString()))]),
     ...(await buildLiquidate(p, admin.publicKey, new PublicKey(h.owner), h.largest, units)),
   );
   const sig = await send(p, t);
@@ -287,7 +292,7 @@ export async function collectOverdue(owner?: string): Promise<Collection[]> {
         const usdcAta = ata(USDC_MINT, admin.publicKey);
         const t = tx(
           createAssociatedTokenAccountIdempotentInstruction(admin.publicKey, usdcAta, admin.publicKey, USDC_MINT),
-          ...(owed > BigInt(0) ? [createMintToInstruction(USDC_MINT, usdcAta, admin.publicKey, owed)] : []),
+          ...(owed > BigInt(0) && !IS_MAINNET ? [createMintToInstruction(USDC_MINT, usdcAta, admin.publicKey, owed)] : []),
           ...(await buildCollectOverdue(p, admin.publicKey, l.owner, l.index, asset)),
         );
         const sig = await send(p, t);

@@ -31,12 +31,12 @@ Start with purchases that are large enough to matter and paid online in stableco
 
 | Line | Amount |
 | --- | --- |
-| Merchant fee (1.5%) | $15 |
+| Merchant fee (1.5%) | $15, split on-chain: $10.50 to LPs, $3 to the HodlPay treasury, $1.50 to the first-loss reserve |
 | Capital used | $985, amortizing over 42 days: equivalent to $985 for 21 days |
-| Gross yield on deployed capital | 15 / 985 × 365 / 21 ≈ 26% APR before late fees; realized pool APY = this × utilization |
-| Credit loss | near zero by design: overcollateralized, keeper liquidates before debt exceeds collateral |
+| LP yield on deployed capital | 10.50 / 985 × 365 / 21 ≈ 18.5% APR before late fees; realized pool APY = this × utilization |
+| Credit loss | near zero by design: overcollateralized, keeper liquidates before debt exceeds collateral; whatever slips through hits the reserve before LPs |
 
-Protocol take rate (future): a share of the merchant fee (e.g. 20%) to the treasury, the rest to LPs.
+Protocol revenue is live in the program: 20% of every fee paid in cash accrues to the treasury (0.3% of purchase volume), 10% to the reserve. At the +3 month target of $250k volume that is $750 of treasury revenue; at $10M a year, $30k. The split is a parameter (`set_protocol`), capped at 50% so LPs always keep most of the yield.
 
 ## Milestones
 
@@ -51,7 +51,7 @@ Protocol take rate (future): a share of the merchant fee (e.g. 20%) to the treas
 
 - **Capital efficiency**: collateral must exceed the purchase, so the market is holders who won't sell, not everyone. We cut what they lock: the first installment is paid inside checkout, so only the remaining 75% counts against the limit ($1,500 of SOL for a $1,000 purchase instead of $2,000), and on-time repayments lower it to $1,250.
 - **Collateral crash**: per-asset LTV tiers, margin alerts before liquidation, 50% close factor, 5% bonus for liquidators, stale-price guard.
-- **Liquidity crunch**: withdrawals limited to idle liquidity; utilization shown in the pool; pool cap during beta.
+- **Liquidity crunch**: withdrawals limited to idle liquidity; utilization shown in the pool; on-chain beta caps on purchase size and total debt.
 - **Regulation**: users borrow against their own assets with no interest in the base product; merchants receive stablecoins. KYC at checkout thresholds when we move to fiat-facing merchants.
 - **Oracle risk**: Pyth prices with a max age; every credit or liquidation action refuses stale prices.
 - **Unsecured crypto BNPL** (Yumi Finance): same pay-in-4 shape, opposite risk model. Yumi underwrites unsecured credit and prices defaults into a 3% fee; we lend only against collateral, need no personal data, collect missed payments from collateral and charge 1.5%. Yumi fits shoppers without crypto wealth, we fit holders who won't sell.

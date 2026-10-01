@@ -57,9 +57,9 @@ Reset the slider.
 
 **2:35 – 2:45 · Close**
 
-Show the Lend card: share price and fees earned.
-"LPs fund every purchase and earn the fees. Solana for credit, Tempo for settlement, Zcash as collateral. That's HodlPay."
+Show the Lend card: fees earned, protocol revenue and the first-loss reserve.
+"LPs fund every purchase and earn 70% of the fees; the program sends 20% to HodlPay and 10% to a reserve that covers bad debt first. Solana for credit, Tempo for settlement, Zcash as collateral. That's HodlPay."
 
 ## Optional terminal cut (10 seconds)
 
-Show `cargo test -p hodlpay` (12 LiteSVM tests passing, including the credit ladder and its due-date window, the 25% lower collateral when the first installment is paid at checkout, overdue collection, the Pyth price refresh, the Pyth-only mainnet build and the real mainnet zenZEC mint). If you add it, cut the Lend card shot to stay under 3 minutes.
+Show `cargo test -p hodlpay` (15 LiteSVM tests passing, including the on-chain fee split and the reserve absorbing bad debt before LPs, the beta caps, the credit ladder and its due-date window, the 25% lower collateral when the first installment is paid at checkout, overdue collection, the Pyth price refresh, the Pyth-only mainnet build and the real mainnet zenZEC mint). If you add it, cut the Lend card shot to stay under 3 minutes.

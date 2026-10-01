@@ -20,7 +20,7 @@
 
 **1:37 – 2:07 · How it makes money** (Lend card, pool stats)
 
-"The business model is classic BNPL, at half the price. Unsecured BNPL has to guess who will repay and charges merchants around 3% to cover the defaults. We lend safely first and learn from repayments, so we charge 1.5%. That fee goes to liquidity providers who fund every purchase. And if someone doesn't pay? No collections agency: three days after a missed installment, the protocol collects exactly that installment from their collateral, plus a 1% late fee."
+"The business model is classic BNPL, at half the price. Unsecured BNPL has to guess who will repay and charges merchants around 3% to cover the defaults. We lend safely first and learn from repayments, so we charge 1.5%. The program splits every fee: 70% to the liquidity providers who fund purchases, 20% to HodlPay, and 10% to a reserve that absorbs any bad debt before LPs lose a cent. And if someone doesn't pay? No collections agency: three days after a missed installment, the protocol collects exactly that installment from their collateral, plus a 1% late fee."
 
 **2:07 – 2:32 · Why now, why these chains** (architecture slide)
 

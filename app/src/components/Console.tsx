@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import WalletProviders from "@/components/WalletProviders";
 import { Card, PriceTicker, Row, Skel, WalletBar, useWalletRestoring } from "@/components/ui";
-import { DEPLOYMENT, TEMPO, explorerTx, tempoExplorerTx } from "@/lib/hodlpay";
+import { DEPLOYMENT, IS_MAINNET, TEMPO, explorerTx, tempoExplorerTx } from "@/lib/hodlpay";
 import { payPath } from "@/lib/paylink";
 import { CATALOG, MERCHANTS, useOnchain, type Balances, type OnchainView } from "@/lib/useOnchain";
 import {
@@ -190,6 +190,20 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
         <CreditLine m={m} credit={state.credit} loading={loading} />
       </div>
       <div className="lg:col-span-4">
+        {IS_MAINNET ? (
+          <Card title="Checkout" kicker="03 · merchant">
+            <p className="text-sm text-ink-soft">
+              Available to spend: <span className="num text-ink">{usd(m.available)}</span>. Pay any merchant that takes
+              Solana Pay, or open a merchant&apos;s HodlPay link.
+            </p>
+            <Link
+              href="/scan"
+              className="mt-3 block w-full bg-ink px-3 py-3 text-center text-sm font-medium text-paper transition hover:bg-mint"
+            >
+              Scan to pay in 4
+            </Link>
+          </Card>
+        ) : (
         <Checkout
           available={m.available}
           cash={view ? view.balances.USDC + view.creditBalance : undefined}
@@ -204,6 +218,7 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
           receipt={showReceipt ? (state.loans.find((l) => l.id === chain.lastCheckout?.loan) ?? null) : null}
           receiptPending={!!view?.tempoPending.some((p) => p.loan === chain.lastCheckout?.loan)}
         />
+        )}
       </div>
       <div className="lg:col-span-8">
         <Installments
@@ -216,19 +231,21 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
           onPayOff={guard(actions.payOff)}
         />
       </div>
-      <div className="lg:col-span-4">
-        <RiskDesk
-          shock={shock}
-          setShock={setShock}
-          committed={chain.shock}
-          onCommit={(s) => actions.shock(s)}
-          status={m.status}
-          underwater={m.ltv > 1 / (1 + PROTOCOL.liquidationBonus)}
-          busy={busy === "shock" || busy === "liquidate"}
-          onLiquidate={guard(actions.liquidate)}
-          note="Moves the shared oracle price on this demo deployment; it snaps back to live prices after 3 minutes."
-        />
-      </div>
+      {!IS_MAINNET && (
+        <div className="lg:col-span-4">
+          <RiskDesk
+            shock={shock}
+            setShock={setShock}
+            committed={chain.shock}
+            onCommit={(s) => actions.shock(s)}
+            status={m.status}
+            underwater={m.ltv > 1 / (1 + PROTOCOL.liquidationBonus)}
+            busy={busy === "shock" || busy === "liquidate"}
+            onLiquidate={guard(actions.liquidate)}
+            note="Moves the shared oracle price on this demo deployment; it snaps back to live prices after 3 minutes."
+          />
+        </div>
+      )}
       <div className="lg:col-span-4">
         <Lend view={view} busy={busy === "lend"} onLend={guard(actions.lend)} onUnlend={guard(actions.unlend)} />
       </div>

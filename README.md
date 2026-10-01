@@ -85,9 +85,13 @@ For ZEC holders this completes the picture: Zcash keeps what you hold private, a
 | --------- | ----------------------------- | ------------------------------------------------- |
 | Shopper   | 0% interest, late fee if late | Spending power without selling                    |
 | Merchant  | 1.5% fee                      | Full amount upfront in stablecoins, no price risk |
-| LP        | USDC into the pool            | Merchant fees + late fees, via LP share price     |
+| LP        | USDC into the pool            | 70% of merchant fees + late fees, via LP share price |
+| Treasury  | Nothing                       | 20% of fees, claimable by the admin to the treasury wallet |
+| Reserve   | Nothing                       | 10% of fees as first-loss capital: covers bad debt before LPs lose anything |
 
-The pool is value-accruing: `pool value = idle USDC in vault + outstanding debt − unearned merchant fees`. The merchant fee on a loan is earned installment by installment, so an LP cannot capture a fee by depositing right before a checkout and withdrawing right after. LP shares are an SPL mint owned by the program; depositing mints shares at the current share price, withdrawing burns them and is limited to idle liquidity.
+The split is written into the program (`Protocol` account, `set_protocol` changes it; treasury plus reserve is capped at 50%). It applies only to fees paid in cash; fees on installments settled from liquidation credit stay with LPs. Anyone can add first-loss capital with `fund_reserve`; it can never be withdrawn, only spent on write-offs. On devnet the reserve was seeded with 5,000 test USDC and the console's Lend card shows it live.
+
+The pool is value-accruing: `pool value = idle USDC in vault − treasury and reserve balances + outstanding debt − unearned merchant fees`. Treasury and reserve funds sit in the same vault but are not lent out and cannot be withdrawn by LPs. The merchant fee on a loan is earned installment by installment, so an LP cannot capture a fee by depositing right before a checkout and withdrawing right after. LP shares are an SPL mint owned by the program; depositing mints shares at the current share price, withdrawing burns them and is limited to idle liquidity.
 
 ### Merchant side
 
@@ -176,9 +180,9 @@ docs/       Go-to-market notes, pitch and demo video scripts
 
 | Group     | Instructions                                                   |
 | --------- | -------------------------------------------------------------- |
-| Admin     | `initialize`, `add_asset`, `update_price` (devnet build only), `set_keeper`, `set_merchant_fee` |
+| Admin     | `initialize`, `add_asset`, `update_price` (devnet build only), `set_keeper`, `set_merchant_fee`, `init_protocol`, `set_protocol` (fee split and beta caps), `claim_revenue` |
 | Oracle    | `refresh_price` (permissionless, Pyth)                         |
-| Liquidity | `deposit_liquidity`, `withdraw_liquidity`                      |
+| Liquidity | `deposit_liquidity`, `withdraw_liquidity`, `fund_reserve` (permissionless) |
 | Position  | `open_position`, `deposit`, `withdraw`                         |
 | Credit    | `checkout`, `repay`                                            |
 | Risk      | `collect_overdue`, `liquidate`, `check_health` (all permissionless) |
@@ -267,6 +271,8 @@ The release profile builds with `opt-level = "z"` (about 390 KB), so the deploy 
 | `PYTH_API_KEY` | prices | Pyth Hermes; falls back to public market data |
 | `HODLPAY_CLUSTER`, `HODLPAY_RPC`, `NEXT_PUBLIC_RPC` | bootstrap | Target cluster and RPC written to `deployment.json` |
 | `USDC_MINT`, `ZEC_MINT` | bootstrap | Use existing mints (mainnet USDC / zenZEC) instead of test mints |
+| `TREASURY`, `TREASURY_SHARE_BPS`, `RESERVE_SHARE_BPS` | bootstrap | Revenue split (defaults: admin wallet, 2000, 1000) |
+| `MAX_LOAN_USDC`, `MAX_TOTAL_DEBT_USDC`, `RESERVE_USDC` | bootstrap | Beta caps (0 = none) and first-loss capital to seed the reserve with |
 | `TEMPO_PRIVATE_KEY` | Tempo relayer | Relayer key (owner and gas payer); defaults to `app/.hodlpay/tempo-key.json` |
 | `TEMPO_ATTESTER_KEYS` | Tempo attesters | JSON array of the attester private keys; defaults to `app/.hodlpay/tempo-attesters.json` (created by `npm run tempo:deploy`) |
 | `TEMPO_ATTESTER_RPC_3` | Tempo attesters | Solana RPC for the third attester (the first two use `SOLANA_RPC` and the public RPC) |
@@ -282,20 +288,20 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 
 | Area | Today | Before mainnet |
 | --- | --- | --- |
-| Custody | Collateral and pool USDC sit in program-owned PDAs. There is no admin instruction that can move them; only the position owner (withdraw, repay), LPs (their share of idle liquidity) and liquidators (past the liquidation line) move funds. The program's upgrade authority is still a single key. | Upgrade authority to a multisig with a timelock, then freeze. |
+| Custody | Collateral and pool USDC sit in program-owned PDAs. The only admin instruction that moves funds is `claim_revenue`, which pays at most the accrued treasury balance, only to the treasury wallet set in `Protocol`; collateral, LP funds and the reserve are out of its reach. Otherwise only the position owner (withdraw, repay), LPs (their share of idle liquidity) and liquidators (past the liquidation line) move funds. The program's upgrade authority is still a single key. | Upgrade authority and treasury to a multisig with a timelock, then freeze. |
 | Oracle | `refresh_price` is permissionless and fully checks Pyth updates. `update_price` lets the keeper key post any positive price; the demo uses it for the stress test and for assets without a fresh sponsored feed. A compromised keeper key could therefore trigger liquidations on devnet. The `mainnet` build already rejects `update_price` (tested in CI). | Ship the `mainnet` build: prices come only from verified Pyth updates, which anyone can post for any feed through the Pyth receiver. Add a deviation guard against the last price. |
 | Liquidation | The `liquidate` instruction is permissionless, capped at 50% of debt per call with a 5% bonus. On the demo site the keeper only liquidates the position of the visitor who presses the button, so one visitor's stress test never liquidates another's position. | Open liquidation to any bot; keeper becomes one liquidator among many. |
 | Tempo rail | Payouts need 2 of 3 attester signatures, each attester verifying the Solana checkout itself, under per-payout and daily caps, and `/audit` reconciles every payout (see [Tempo rail](#tempo-rail)). All three attester keys are run by HodlPay in this demo. | Independent attester operators and a multisig owner, then light-client or attestation-bridge verification. |
 | Collateral | Devnet uses test USDC and test zenZEC mints the admin can mint. | Real USDC and Zenrock zenZEC (`ZEC_MINT`), no mint authority. |
 | Demo operations | The site's faucet and keeper are paid by one devnet admin wallet; the faucet pauses below 1 SOL so price updates keep running. The stress test shifts the shared devnet oracle and reverts to live prices after 3 minutes. | Not applicable on mainnet (no faucet, no stress test). |
-| Credit risk | Installment plans are over-collateralized (max LTV 40–50%, up to 50–60% for wallets with an on-time record, always at least 5 points under the margin alert). There is no off-chain credit scoring. A missed installment is collected from collateral 3 days after its due date (`collect_overdue`, 1% late fee plus the 5% collector bonus); if no single collateral asset can cover it, the position is left to regular liquidation. | Tune tiers on live volatility data; add a reserve fund from part of the merchant fee. |
-| Bad debt | If a crash seizes all collateral and debt remains, `liquidate` writes it off: the debt leaves the pool's books (`bad_debt` in the event) and the LP pool absorbs the loss. Liquidation proceeds already credited to the position still pay down later installments. | Reserve fund covers write-offs before LPs. |
+| Credit risk | Installment plans are over-collateralized (max LTV 40–50%, up to 50–60% for wallets with an on-time record, always at least 5 points under the margin alert). There is no off-chain credit scoring. A missed installment is collected from collateral 3 days after its due date (`collect_overdue`, 1% late fee plus the 5% collector bonus); if no single collateral asset can cover it, the position is left to regular liquidation. Beta caps in `Protocol` (largest purchase, total outstanding debt) bound the exposure while the tiers are proven; they are off on devnet. | Tune tiers on live volatility data; raise the caps with repayment performance. |
+| Bad debt | If a crash seizes all collateral and debt remains, `liquidate` writes it off: the debt leaves the pool's books (`bad_debt` in the event). The first-loss reserve covers it first (`reserve_covered`); LPs absorb only what the reserve cannot. Liquidation proceeds already credited to the position still pay down later installments. | Size the reserve against live loss data. |
 | LP pool | Merchant fees are earned installment by installment, so a deposit around a checkout captures none of its fee. The share price cannot be inflated by a first depositor because the pool is seeded at bootstrap. | Minimum-liquidity lock on new pools. |
 | Assets | Only classic SPL Token mints (not Token-2022) can be listed. | Token-2022 support when a listed asset needs it. |
 
 ## Roadmap
 
-- Mainnet with real USDC and zenZEC, from the `mainnet` build (Pyth-only prices, no keeper price path)
+- Mainnet beta with real USDC and zenZEC, from the `mainnet` build (Pyth-only prices, no keeper price path), with per-purchase and total-debt caps and a seeded first-loss reserve ([runbook](docs/mainnet-runbook.md))
 - Solana Pay transaction requests (merchant-built transactions) and mainnet USDC codes from wallets and point-of-sale apps
 - Merchant SDK (React button, webhooks on sale)
 - Portable credit record: let other protocols check a `CreditProfile` level through a zero-knowledge proof, without learning the wallet

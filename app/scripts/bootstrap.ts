@@ -4,21 +4,33 @@
  * Idempotent: safe to re-run.
  *
  *   HODLPAY_CLUSTER=localnet npx tsx scripts/bootstrap.ts
+ *
+ * Mainnet (docs/mainnet-runbook.md) uses the real mints, never mints, and
+ * requires every money parameter to be set explicitly.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { homedir } from "node:os";
-import { createMint, getOrCreateAssociatedTokenAccount, mintTo, NATIVE_MINT } from "@solana/spl-token";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { createMint, getAssociatedTokenAddressSync, getOrCreateAssociatedTokenAccount, mintTo, NATIVE_MINT } from "@solana/spl-token";
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import idl from "../src/lib/hodlpay/idl.json";
 
 const CLUSTERS: Record<string, string> = {
   localnet: "http://127.0.0.1:8899",
   devnet: "https://api.devnet.solana.com",
+  mainnet: "https://api.mainnet-beta.solana.com",
 };
 const cluster = process.env.HODLPAY_CLUSTER ?? "localnet";
 const rpc = process.env.HODLPAY_RPC ?? CLUSTERS[cluster];
 const DAY = 86_400;
+const MAINNET = cluster === "mainnet";
+const MAINNET_REQUIRED = ["HODLPAY_RPC", "USDC_MINT", "ZEC_MINT", "TREASURY", "MAX_LOAN_USDC", "MAX_TOTAL_DEBT_USDC", "RESERVE_USDC", "LIQUIDITY_USDC"];
+if (MAINNET) {
+  const missing = MAINNET_REQUIRED.filter((k) => !process.env[k]);
+  if (missing.length) throw new Error(`mainnet bootstrap needs ${missing.join(", ")}`);
+  process.env.SOLANA_RPC = process.env.HODLPAY_RPC;
+  process.env.NEXT_PUBLIC_HODLPAY_CLUSTER = "mainnet";
+}
 
 const keysDir = path.join(process.cwd(), ".hodlpay", "keys");
 mkdirSync(keysDir, { recursive: true });
@@ -38,7 +50,15 @@ async function main() {
     ),
   );
   const conn = new Connection(rpc, "confirmed");
-  console.log(`cluster ${cluster} (${rpc}), admin ${admin.publicKey.toBase58()}`);
+  console.log(`cluster ${cluster} (${MAINNET ? CLUSTERS.mainnet : rpc}), admin ${admin.publicKey.toBase58()}`);
+  if (MAINNET) {
+    const need = Number(process.env.RESERVE_USDC) + Number(process.env.LIQUIDITY_USDC);
+    const usdcAta = getAssociatedTokenAddressSync(new PublicKey(process.env.USDC_MINT!), admin.publicKey);
+    const usdc = await conn.getTokenAccountBalance(usdcAta).then((b) => Number(b.value.uiAmount), () => 0);
+    const sol = (await conn.getBalance(admin.publicKey)) / LAMPORTS_PER_SOL;
+    console.log(`admin holds ${usdc} USDC (needs ${need}) and ${sol} SOL (needs 0.2)`);
+    if (usdc < need || sol < 0.2) throw new Error("fund the admin wallet first");
+  }
 
   // On mainnet, pass the real mints: USDC_MINT=EPjF…Dt1v ZEC_MINT=JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS
   const usdcKp = loadOrCreate("usdc-mint");
@@ -55,7 +75,7 @@ async function main() {
     }
   }
 
-  const deploymentFile = path.join(process.cwd(), "src/lib/hodlpay/deployment.json");
+  const deploymentFile = path.join(process.cwd(), `src/lib/hodlpay/deployment${MAINNET ? ".mainnet" : ""}.json`);
   // Re-running on the same cluster keeps fields set later (public RPC, launch time, Tempo bridge).
   const existing = existsSync(deploymentFile) ? JSON.parse(readFileSync(deploymentFile, "utf8")) : {};
   const kept = existing.cluster === cluster ? existing : {};
@@ -64,12 +84,14 @@ async function main() {
     JSON.stringify(
       {
         cluster,
-        rpc: process.env.NEXT_PUBLIC_RPC ?? kept.rpc ?? rpc,
+        // Committed and shipped to browsers: never the private (keyed) RPC on mainnet.
+        rpc: process.env.NEXT_PUBLIC_RPC ?? kept.rpc ?? (MAINNET ? CLUSTERS.mainnet : rpc),
         programId: idl.address,
         usdcMint: usdcMint.toBase58(),
         zecMint: zecMint.toBase58(),
         solMint: NATIVE_MINT.toBase58(),
-        tempoBridge: kept.tempoBridge ?? admin.publicKey.toBase58(),
+        // The Tempo rail runs on Tempo testnet only.
+        ...(MAINNET ? {} : { tempoBridge: kept.tempoBridge ?? admin.publicKey.toBase58() }),
         ...(kept.launchedAt ? { launchedAt: kept.launchedAt } : {}),
       },
       null,

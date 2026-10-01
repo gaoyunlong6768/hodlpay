@@ -214,13 +214,15 @@ function LinkBuilder({ profile }: { profile: Profile }) {
           <Field label="Price (USD)" value={amount} onChange={setAmount} valid={Number.isFinite(x) && x >= 1} />
           <div>
             <span className="num mb-1 block text-[11px] uppercase tracking-widest text-ink-soft">Settle to me on</span>
-            <div className="grid grid-cols-2 border border-ink text-sm">
+            <div className={`grid border border-ink text-sm ${hp.DEPLOYMENT.tempoBridge ? "grid-cols-2" : "grid-cols-1"}`}>
               <button onClick={() => setRail("solana")} className={`py-2 transition ${rail === "solana" ? "bg-ink text-paper" : ""}`}>
                 Solana · USDC
               </button>
-              <button onClick={() => setRail("tempo")} className={`py-2 transition ${rail === "tempo" ? "bg-tempo text-paper" : ""}`}>
-                Tempo · {hp.TEMPO.token}
-              </button>
+              {hp.DEPLOYMENT.tempoBridge && (
+                <button onClick={() => setRail("tempo")} className={`py-2 transition ${rail === "tempo" ? "bg-tempo text-paper" : ""}`}>
+                  Tempo · {hp.TEMPO.token}
+                </button>
+              )}
             </div>
             {!railOk && (
               <p className="num mt-1 text-[11px] text-vermilion">

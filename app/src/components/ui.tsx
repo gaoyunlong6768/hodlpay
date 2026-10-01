@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
 import { DemoWalletName } from "@/lib/demoWallet";
-import { DEPLOYMENT, explorerAddress } from "@/lib/hodlpay";
+import { DEPLOYMENT, IS_MAINNET, explorerAddress } from "@/lib/hodlpay";
 import type { Balances } from "@/lib/useOnchain";
 import { usd, type AssetId } from "@/lib/engine";
 
@@ -70,19 +70,23 @@ export function WalletBar({
             <Skel className="w-56" />
           )}
           <span className="ml-auto flex gap-2">
-            <button
-              onClick={onFaucet}
-              disabled={!!busy}
-              className="num border border-ink px-3 py-1.5 text-xs transition hover:bg-paper-2 disabled:opacity-40"
-            >
-              {busy === "faucet" ? "Sending…" : "Get test funds"}
-            </button>
+            {!IS_MAINNET && (
+              <button
+                onClick={onFaucet}
+                disabled={!!busy}
+                className="num border border-ink px-3 py-1.5 text-xs transition hover:bg-paper-2 disabled:opacity-40"
+              >
+                {busy === "faucet" ? "Sending…" : "Get test funds"}
+              </button>
+            )}
             <button onClick={() => disconnect()} className="num px-2 py-1.5 text-xs text-ink-soft underline">
               disconnect
             </button>
           </span>
           <p className="basis-full text-[11px] text-ink-soft">
-            {wallet?.adapter.name === DemoWalletName
+            {IS_MAINNET
+              ? "Mainnet beta: real funds, unaudited contract, per-purchase and total-debt caps."
+              : wallet?.adapter.name === DemoWalletName
               ? `Demo wallet: a real Solana ${DEPLOYMENT.cluster} wallet whose key is kept in this browser and signs without popups. Test funds only; clearing site data creates a new one.`
               : `Real transactions on Solana ${DEPLOYMENT.cluster}: switch your wallet to ${DEPLOYMENT.cluster} (in Phantom: Settings → Developer Settings → Testnet Mode), then press Get test funds.`}
           </p>
@@ -92,6 +96,8 @@ export function WalletBar({
           <span className="text-sm text-ink-soft">
             {connecting && wallet ? (
               `Reconnecting ${wallet.adapter.name}…`
+            ) : IS_MAINNET ? (
+              "Mainnet beta: real funds, unaudited contract. Connect Phantom, Solflare or Backpack."
             ) : (
               <>
                 Every action is a real transaction on Solana {DEPLOYMENT.cluster}.{" "}
@@ -102,13 +108,15 @@ export function WalletBar({
             )}
           </span>
           <span className="relative ml-auto flex gap-2">
-            <button
-              onClick={() => choose(DemoWalletName)}
-              disabled={connecting}
-              className="bg-ink px-4 py-2 text-sm font-medium text-paper transition hover:bg-mint"
-            >
-              {connecting ? "Connecting…" : "Use demo wallet"}
-            </button>
+            {!IS_MAINNET && (
+              <button
+                onClick={() => choose(DemoWalletName)}
+                disabled={connecting}
+                className="bg-ink px-4 py-2 text-sm font-medium text-paper transition hover:bg-mint"
+              >
+                {connecting ? "Connecting…" : "Use demo wallet"}
+              </button>
+            )}
             <button onClick={() => setOpen((o) => !o)} disabled={connecting} className="border border-ink px-4 py-2 text-sm">
               Connect wallet
             </button>

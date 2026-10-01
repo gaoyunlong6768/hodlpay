@@ -15,7 +15,8 @@ import {
   Transaction,
   TransactionInstruction,
 } from "@solana/web3.js";
-import deployment from "./deployment.json";
+import devnetDeployment from "./deployment.json";
+import mainnetDeployment from "./deployment.mainnet.json";
 import idl from "./idl.json";
 import tempo from "./tempo.json";
 import type { Hodlpay } from "./types";
@@ -23,7 +24,8 @@ import type { Hodlpay } from "./types";
 export type { Hodlpay };
 export { BN };
 
-export const DEPLOYMENT = deployment as {
+/** Build-time choice: `NEXT_PUBLIC_HODLPAY_CLUSTER=mainnet` selects the mainnet deployment. */
+export const DEPLOYMENT = (process.env.NEXT_PUBLIC_HODLPAY_CLUSTER === "mainnet" ? mainnetDeployment : devnetDeployment) as {
   cluster: string;
   rpc: string;
   programId: string;
@@ -35,6 +37,9 @@ export const DEPLOYMENT = deployment as {
   /** Unix time of the first transaction on this deployment. */
   launchedAt?: number;
 };
+
+/** Real funds: no faucet, demo wallet, stress tests or Tempo testnet rail. */
+export const IS_MAINNET = DEPLOYMENT.cluster === "mainnet";
 
 export const PROGRAM_ID = new PublicKey(DEPLOYMENT.programId);
 export const USDC_MINT = new PublicKey(DEPLOYMENT.usdcMint);
@@ -147,7 +152,9 @@ export const assetMetas = () =>
 const explorerSuffix = () =>
   DEPLOYMENT.cluster === "localnet"
     ? `?cluster=custom&customUrl=${encodeURIComponent(DEPLOYMENT.rpc)}`
-    : `?cluster=${DEPLOYMENT.cluster}`;
+    : IS_MAINNET
+      ? ""
+      : `?cluster=${DEPLOYMENT.cluster}`;
 
 export const explorerTx = (sig: string) => `https://explorer.solana.com/tx/${sig}${explorerSuffix()}`;
 export const explorerAddress = (addr: string) => `https://explorer.solana.com/address/${addr}${explorerSuffix()}`;

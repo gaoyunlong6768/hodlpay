@@ -20,9 +20,11 @@ export default function SiteHeader() {
         <Link href="/merchant" className="hover:text-ink">
           Merchants
         </Link>
-        <Link href="/audit" className="hover:text-ink">
-          Audit
-        </Link>
+        {DEPLOYMENT.tempoBridge && (
+          <Link href="/audit" className="hover:text-ink">
+            Audit
+          </Link>
+        )}
         <span className="hidden border border-ink px-2.5 py-1 text-ink sm:inline">{DEPLOYMENT.cluster}</span>
       </nav>
     </header>

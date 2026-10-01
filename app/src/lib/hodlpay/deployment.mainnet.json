@@ -1,0 +1,8 @@
+{
+  "cluster": "mainnet",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "programId": "5WWDSNYRjmU3Jp7DywyYgDYtYiBBZ3e8JmcBgS2HxihH",
+  "usdcMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "zecMint": "JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS",
+  "solMint": "So11111111111111111111111111111111111111112"
+}
