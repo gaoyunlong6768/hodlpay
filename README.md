@@ -301,7 +301,7 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 
 ## Roadmap
 
-- Mainnet beta with real USDC and zenZEC, from the `mainnet` build (Pyth-only prices, no keeper price path), with per-purchase and total-debt caps and a seeded first-loss reserve ([runbook](docs/mainnet-runbook.md))
+- Mainnet beta with real USDC and zenZEC, from the `mainnet` build (Pyth-only prices, no keeper price path), with per-purchase and total-debt caps and a seeded first-loss reserve (`HODLPAY_CLUSTER=mainnet` bootstrap and `NEXT_PUBLIC_HODLPAY_CLUSTER=mainnet` app build are ready)
 - Solana Pay transaction requests (merchant-built transactions) and mainnet USDC codes from wallets and point-of-sale apps
 - Merchant SDK (React button, webhooks on sale)
 - Portable credit record: let other protocols check a `CreditProfile` level through a zero-knowledge proof, without learning the wallet
