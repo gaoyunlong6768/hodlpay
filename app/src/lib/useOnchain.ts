@@ -5,7 +5,7 @@ import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapte
 import { LAMPORTS_PER_SOL, PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import * as hp from "@/lib/hodlpay";
 import type { AssetId, CreditRecord, Installment, LedgerEvent, Loan, Rail, State, EventKind } from "@/lib/engine";
-import { creditChange, usd } from "@/lib/engine";
+import { creditChange, earlyNote, usd } from "@/lib/engine";
 import { buildSolanaPayCheckout, parseSolanaPay, planTotal } from "@/lib/solanapay";
 
 export const MERCHANTS: Record<string, PublicKey> = {
@@ -349,11 +349,11 @@ export function useOnchain() {
     if (view && view.priceAge > 45) await keeper({ force: true });
   }, [view, keeper]);
 
-  /** Logs a credit level change caused by a repayment just sent. */
+  /** Logs a credit level change caused by a repayment just sent, or why `paid` built none. */
   const noteCredit = useCallback(
-    async (before: CreditRecord | undefined) => {
+    async (before: CreditRecord | undefined, paid?: Installment) => {
       if (!before || !program || !publicKey) return;
-      const note = creditChange(before, await hp.fetchCredit(program, publicKey));
+      const note = creditChange(before, await hp.fetchCredit(program, publicKey)) ?? (paid ? earlyNote(paid, Date.now()) : null);
       if (note) log("repay", note);
     },
     [program, publicKey, log],
@@ -462,7 +462,7 @@ export function useOnchain() {
         const chainIndex = (await hp.readonlyProgram(connection).account.loan.fetch(new PublicKey(loanAddress))).index;
         const sig = await send(await hp.buildRepay(program!, publicKey!, chainIndex));
         log("repay", `Repaid an installment on ${loan?.item ?? "loan"}`, sig);
-        await noteCredit(view?.state.credit);
+        await noteCredit(view?.state.credit, loan?.installments.find((i) => i.paidAt === null));
       }),
 
     repayMany: (loanAddresses: string[]) =>

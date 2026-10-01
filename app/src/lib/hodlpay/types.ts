@@ -1774,6 +1774,11 @@ export type Hodlpay = {
       "code": 6019,
       "name": "notOverdue",
       "msg": "Installment is not past its grace period"
+    },
+    {
+      "code": 6020,
+      "name": "keeperPricesDisabled",
+      "msg": "Keeper prices are disabled in this build; use refresh_price"
     }
   ],
   "types": [
@@ -2421,6 +2426,15 @@ export type Hodlpay = {
       ],
       "type": "u16",
       "value": "250"
+    },
+    {
+      "name": "creditWindow",
+      "docs": [
+        "An installment builds credit only if paid at most this long before its due date,",
+        "so a record takes real time to earn instead of one prepayment."
+      ],
+      "type": "i64",
+      "value": "604800"
     },
     {
       "name": "liquiditySeed",

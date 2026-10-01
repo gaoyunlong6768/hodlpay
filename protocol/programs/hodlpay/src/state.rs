@@ -124,6 +124,10 @@ impl Loan {
         self.installments_paid < self.installments_total && now > self.next_due_at + grace_period
     }
 
+    pub fn in_credit_window(&self, now: i64) -> bool {
+        now >= self.next_due_at - CREDIT_WINDOW
+    }
+
     pub fn next_installment(&self) -> Result<u64> {
         require!(self.installments_paid < self.installments_total, ErrorCode::LoanRepaid);
         if self.installments_paid + 1 == self.installments_total {

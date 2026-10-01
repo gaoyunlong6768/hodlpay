@@ -15,7 +15,7 @@ Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 1. Open the console and click **Use demo wallet**: a real devnet wallet created in your browser, no extension and no signing popups (its key stays in localStorage, so test funds only). Or click **Connect wallet** to use Phantom, Solflare or Backpack switched to devnet.
 2. Click **Get test funds**: 2,000 test USDC, 3 test zenZEC and a little SOL for fees.
 3. Lock zenZEC, buy the $860 flight and pick the settlement rail (USDC on Solana or stablecoins on Tempo).
-4. Repay an installment (on-time repayments move the credit ladder in the Credit line card), then drag the Risk desk slider to -60% to trigger a margin alert and a keeper liquidation.
+4. Repay an installment (paid in the week before its due date, it moves the credit ladder in the Credit line card; earlier, it is accepted and the row shows when it would count), then drag the Risk desk slider to -60% to trigger a margin alert and a keeper liquidation.
 
 Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchant](https://hodlpay.vercel.app/merchant). To try Solana Pay, open **Solana Pay point of sale** there, press **Show Solana Pay code**, then scan it at [hodlpay.vercel.app/scan](https://hodlpay.vercel.app/scan) on your phone (or press **Pay it with HodlPay here**); the point of sale confirms the payment with `@solana/pay`'s own `validateTransfer`. Every action is a real devnet transaction linked to the explorer.
 
@@ -48,7 +48,8 @@ Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchan
 
 The collateral is the credit check; repayment history is the credit score. Each wallet has a `CreditProfile` PDA that `repay` updates:
 
-- Every $250 the borrower repays on time in USDC adds 2.5 points of max LTV, up to +10 points (level 4). On time means before the 3-day grace period ends; the first installment, paid at checkout, does not count.
+- Every $250 the borrower repays on time in USDC adds 2.5 points of max LTV, up to +10 points (level 4). On time means in the 7 days before the due date (`CREDIT_WINDOW`) or within the 3-day grace period after it; the first installment, paid at checkout, does not count.
+- Prepaying earlier is always allowed but builds no credit. Otherwise a wallet could check out to itself and repay every installment in the same minute, buying level 4 for the 1.5% fee; with the window, each level takes real repayment weeks.
 - The boost stops 5 points below the margin alert line: SOL goes from 50% to at most 60%, zenZEC from 40% to at most 50%.
 - A late payment, an overdue collection or a liquidation resets progress to level 0.
 - Levels raise the limit for new purchases and withdrawals only. Margin alerts, health checks and liquidation always use the base tiers, so a higher level never lets a position get closer to liquidation than it could before.
@@ -100,7 +101,7 @@ The merchant portal includes a minimal Solana Pay point of sale with no HodlPay 
 
 ### Oracle
 
-Every asset stores its Pyth feed id. `refresh_price` is permissionless: anyone can pass a Pyth `PriceUpdateV2` account (for example the sponsored feed accounts Pyth keeps fresh on devnet and mainnet), and the program checks the owner (Pyth receiver), full Wormhole verification, the feed id, the confidence interval (≤ 2% of price) and the age before accepting it. Older updates never overwrite newer prices. The keeper uses this path when a fresh sponsored feed exists and falls back to posting prices itself (`update_price`) otherwise, e.g. on localnet or during the demo stress test.
+Every asset stores its Pyth feed id. `refresh_price` is permissionless: anyone can pass a Pyth `PriceUpdateV2` account (for example the sponsored feed accounts Pyth keeps fresh on devnet and mainnet), and the program checks the owner (Pyth receiver), full Wormhole verification, the feed id, the confidence interval (≤ 2% of price) and the age before accepting it. Older updates never overwrite newer prices. The keeper uses this path when a fresh sponsored feed exists and falls back to posting prices itself (`update_price`) otherwise, e.g. on localnet or during the demo stress test. The mainnet build (`cargo build-sbf --features mainnet`) rejects `update_price` with `KeeperPricesDisabled`, so there no key can set a price; CI builds that variant and the test `mainnet_build_prices_from_pyth_only` runs against it.
 
 ### How it compares
 
@@ -166,7 +167,7 @@ docs/       Go-to-market notes, pitch and demo video scripts
 
 | Group     | Instructions                                                   |
 | --------- | -------------------------------------------------------------- |
-| Admin     | `initialize`, `add_asset`, `update_price`, `set_keeper`, `set_merchant_fee` |
+| Admin     | `initialize`, `add_asset`, `update_price` (devnet build only), `set_keeper`, `set_merchant_fee` |
 | Oracle    | `refresh_price` (permissionless, Pyth)                         |
 | Liquidity | `deposit_liquidity`, `withdraw_liquidity`                      |
 | Position  | `open_position`, `deposit`, `withdraw`                         |
@@ -273,7 +274,7 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 | Area | Today | Before mainnet |
 | --- | --- | --- |
 | Custody | Collateral and pool USDC sit in program-owned PDAs. There is no admin instruction that can move them; only the position owner (withdraw, repay), LPs (their share of idle liquidity) and liquidators (past the liquidation line) move funds. The program's upgrade authority is still a single key. | Upgrade authority to a multisig with a timelock, then freeze. |
-| Oracle | `refresh_price` is permissionless and fully checks Pyth updates. `update_price` lets the keeper key post any positive price; the demo uses it for the stress test and for assets without a fresh sponsored feed. A compromised keeper key could therefore trigger liquidations. | Pyth-only pricing (remove or bound `update_price`), plus a confidence and deviation guard against the last price. |
+| Oracle | `refresh_price` is permissionless and fully checks Pyth updates. `update_price` lets the keeper key post any positive price; the demo uses it for the stress test and for assets without a fresh sponsored feed. A compromised keeper key could therefore trigger liquidations on devnet. The `mainnet` build already rejects `update_price` (tested in CI). | Ship the `mainnet` build: prices come only from verified Pyth updates, which anyone can post for any feed through the Pyth receiver. Add a deviation guard against the last price. |
 | Liquidation | The `liquidate` instruction is permissionless, capped at 50% of debt per call with a 5% bonus. On the demo site the keeper only liquidates the position of the visitor who presses the button, so one visitor's stress test never liquidates another's position. | Open liquidation to any bot; keeper becomes one liquidator among many. |
 | Tempo rail | Payouts need 2 of 3 attester signatures, each attester verifying the Solana checkout itself, under per-payout and daily caps, and `/audit` reconciles every payout (see [Tempo rail](#tempo-rail)). All three attester keys are run by HodlPay in this demo. | Independent attester operators and a multisig owner, then light-client or attestation-bridge verification. |
 | Collateral | Devnet uses test USDC and test zenZEC mints the admin can mint. | Real USDC and Zenrock zenZEC (`ZEC_MINT`), no mint authority. |
@@ -285,7 +286,7 @@ HodlPay is a hackathon build on devnet and has not been audited. What a user has
 
 ## Roadmap
 
-- Mainnet with real USDC and zenZEC; drop keeper-posted prices once every asset has a sponsored Pyth feed
+- Mainnet with real USDC and zenZEC, from the `mainnet` build (Pyth-only prices, no keeper price path)
 - Solana Pay transaction requests (merchant-built transactions) and mainnet USDC codes from wallets and point-of-sale apps
 - Merchant SDK (React button, webhooks on sale)
 - Portable credit record: let other protocols check a `CreditProfile` level through a zero-knowledge proof, without learning the wallet

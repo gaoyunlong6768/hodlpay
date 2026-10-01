@@ -13,6 +13,7 @@ import {
   advanceDays,
   checkout,
   creditLevel,
+  creditWindowOpens,
   deposit,
   initialState,
   liquidate,
@@ -607,8 +608,9 @@ function CreditLadder({ credit, loading }: { credit: CreditRecord; loading?: boo
         {level < maxLevel
           ? `Repay ${usd(stepUsd * (level + 1) - credit.onTimeRepaid)} more on time for +${pts(level + 1)}. `
           : `Top level: +${pts(maxLevel)} on every asset. `}
-        Collateral replaces the credit check; each on-time installment after checkout lowers the collateral you need. A late
-        payment or collection resets it.
+        Collateral replaces the credit check; each installment after checkout paid in the {PROTOCOL.credit.windowDays} days
+        before its due date lowers the collateral you need, so a record takes real time to earn. A late payment or collection
+        resets it.
       </p>
     </div>
   );
@@ -986,6 +988,14 @@ function Installments({
                       ? `${overdue ? "overdue" : "due"} ${new Date(next.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}${prepaid ? " · prepaid" : ""}`
                       : "paid off"}
                   </span>
+                  {next && !prepaid && next.index > 0 && state.now < creditWindowOpens(next) && (
+                    <span
+                      className="block text-[11px] text-ink-soft"
+                      title={`Only payments in the ${PROTOCOL.credit.windowDays} days before a due date build credit`}
+                    >
+                      credit from {new Date(creditWindowOpens(next)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-1.5">
                   <button

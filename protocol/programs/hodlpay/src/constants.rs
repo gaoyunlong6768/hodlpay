@@ -39,6 +39,11 @@ pub const CREDIT_MAX_BONUS_BPS: u16 = 1_000;
 #[constant]
 pub const CREDIT_MARGIN_BUFFER_BPS: u16 = 500;
 
+/// An installment builds credit only if paid at most this long before its due date,
+/// so a record takes real time to earn instead of one prepayment.
+#[constant]
+pub const CREDIT_WINDOW: i64 = 7 * 86_400;
+
 /// Collateral slots per position.
 pub const MAX_ASSETS: usize = 4;
 

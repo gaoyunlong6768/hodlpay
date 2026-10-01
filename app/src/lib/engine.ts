@@ -42,7 +42,7 @@ export const PROTOCOL = {
   graceDays: 3,
   liquidationBonus: 0.05,
   /** On-time repayment ladder, as enforced by the program (`CREDIT_*` constants). */
-  credit: { stepUsd: 250, stepLtv: 0.025, maxLevel: 4, marginBuffer: 0.05 },
+  credit: { stepUsd: 250, stepLtv: 0.025, maxLevel: 4, marginBuffer: 0.05, windowDays: 7 },
 };
 
 export interface CreditRecord {
@@ -266,13 +266,25 @@ export function repayNext(s: State, loanId: string): State {
   const late = s.now > next.dueAt + PROTOCOL.graceDays * DAY;
   const credit = late
     ? { ...s.credit, onTimeRepaid: 0, resets: s.credit.resets + 1 }
-    : next.index > 0
+    : next.index > 0 && s.now >= creditWindowOpens(next)
       ? { ...s.credit, onTimeRepaid: s.credit.onTimeRepaid + next.amount, onTimeInstallments: s.credit.onTimeInstallments + 1 }
       : s.credit;
   let out = log({ ...s, loans, credit }, "repay", `Repaid installment ${next.index + 1}/4 (${usd(next.amount)}) to ${loan.merchant} loan`);
-  const note = creditChange(s.credit, credit);
+  const note = creditChange(s.credit, credit) ?? (late ? null : earlyNote(next, s.now));
   if (note) out = log(out, "repay", note);
   return checkMargin(out);
+}
+
+/** When paying `i` starts to build credit: `CREDIT_WINDOW` before its due date. */
+export function creditWindowOpens(i: Installment): number {
+  return i.dueAt - PROTOCOL.credit.windowDays * DAY;
+}
+
+/** Ledger line for an installment prepaid before its credit window, if it was. */
+export function earlyNote(i: Installment, now: number): string | null {
+  if (i.index === 0 || now >= creditWindowOpens(i)) return null;
+  const day = new Date(creditWindowOpens(i)).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `Paid early, so no credit for it: only payments in the ${PROTOCOL.credit.windowDays} days before a due date count (this one from ${day})`;
 }
 
 /** Ledger line for a credit level change, if any. */

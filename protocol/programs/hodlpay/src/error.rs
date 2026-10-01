@@ -42,4 +42,6 @@ pub enum ErrorCode {
     PriceUncertain,
     #[msg("Installment is not past its grace period")]
     NotOverdue,
+    #[msg("Keeper prices are disabled in this build; use refresh_price")]
+    KeeperPricesDisabled,
 }

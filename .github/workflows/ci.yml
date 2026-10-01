@@ -28,6 +28,8 @@ jobs:
           key: protocol-${{ runner.os }}-${{ hashFiles('protocol/Cargo.lock') }}
       - name: Build program
         run: cargo build-sbf --manifest-path programs/hodlpay/Cargo.toml
+      - name: Build mainnet variant (Pyth-only prices)
+        run: cargo build-sbf --manifest-path programs/hodlpay/Cargo.toml --features mainnet --sbf-out-dir target/mainnet
       - name: Test
         run: cargo test
 

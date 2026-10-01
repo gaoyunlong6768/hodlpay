@@ -68,8 +68,11 @@ fn balance(svm: &LiteSVM, key: &Pubkey) -> u64 {
 }
 
 fn setup() -> Env {
+    setup_with(include_bytes!(concat!(env!("CARGO_TARGET_TMPDIR"), "/../deploy/hodlpay.so")))
+}
+
+fn setup_with(bytes: &[u8]) -> Env {
     let mut svm = LiteSVM::new();
-    let bytes = include_bytes!(concat!(env!("CARGO_TARGET_TMPDIR"), "/../deploy/hodlpay.so"));
     svm.add_program(hodlpay::id(), bytes).unwrap();
 
     let admin = Keypair::new();
@@ -692,11 +695,12 @@ fn lp_shares_earn_merchant_and_late_fees() {
     let l: Loan = read(&env.svm, &loan);
     assert_eq!(l.fee_earned, 2_400 * USDC);
 
-    // The late installment reset Alice's credit record; the two on-time ones since max it out.
+    // The late installment reset Alice's credit record; installments 3 and 4, prepaid on day 17
+    // for due dates on days 28 and 42, are outside the credit window and build nothing back.
     let credit: CreditProfile = read(&env.svm, &credit_pda(&alice.kp.pubkey()));
     assert_eq!(credit.resets, 1);
-    assert_eq!(credit.on_time_repaid, 40_000 * USDC);
-    assert_eq!(credit.bonus_bps(), CREDIT_MAX_BONUS_BPS);
+    assert_eq!(credit.on_time_repaid, 0);
+    assert_eq!(credit.bonus_bps(), 0);
 
     // Both LPs exit with their share of the $2.6k in fees.
     let pool = balance(&env.svm, &vault);
@@ -728,14 +732,25 @@ fn on_time_repayments_raise_the_credit_limit() {
     assert!(checkout(&mut env, &hana, &m, merchant_usdc, 601 * USDC).is_err());
     let first = checkout(&mut env, &hana, &m, merchant_usdc, 600 * USDC).unwrap();
 
-    // The installment paid at checkout does not count; the next three ($450) do.
-    for _ in 0..4 {
-        repay(&mut env, &hana, first).unwrap();
-    }
+    // The installment due at checkout never counts. Installment 2, prepaid 14 days early,
+    // is accepted but builds nothing: a record cannot be bought in one sitting.
+    repay(&mut env, &hana, first).unwrap();
+    repay(&mut env, &hana, first).unwrap();
     let credit: CreditProfile = read(&env.svm, &credit_pda(&hana.kp.pubkey()));
     assert_eq!(credit.owner, hana.kp.pubkey());
-    assert_eq!(credit.on_time_repaid, 450 * USDC);
-    assert_eq!(credit.on_time_installments, 3);
+    assert_eq!(credit.on_time_repaid, 0);
+    assert_eq!(credit.bonus_bps(), 0);
+
+    // Installments 3 and 4 ($300), each paid in the week before its due date (days 28 and 42), count.
+    advance(&mut env, 22 * DAY);
+    set_price(&mut env, sol, 120 * USDC);
+    repay(&mut env, &hana, first).unwrap();
+    advance(&mut env, 14 * DAY);
+    set_price(&mut env, sol, 120 * USDC);
+    repay(&mut env, &hana, first).unwrap();
+    let credit: CreditProfile = read(&env.svm, &credit_pda(&hana.kp.pubkey()));
+    assert_eq!(credit.on_time_repaid, 300 * USDC);
+    assert_eq!(credit.on_time_installments, 2);
     assert_eq!(credit.bonus_bps(), 250);
 
     // Level 1: SOL max LTV 52.5%, so $630.
@@ -744,15 +759,20 @@ fn on_time_repayments_raise_the_credit_limit() {
     // At the boosted limit, collateral cannot be withdrawn.
     assert!(move_collateral(&mut env, &hana, sol, sol_ata, SOL / 10, true).is_err());
 
-    // Two more on time ($157.50 counts) reach level 2.
+    // Two more on time ($157.50 each, due days 50 and 64 counted from day 36) reach level 2.
     repay(&mut env, &hana, second).unwrap();
+    advance(&mut env, 8 * DAY);
+    set_price(&mut env, sol, 120 * USDC);
+    repay(&mut env, &hana, second).unwrap();
+    advance(&mut env, 14 * DAY);
+    set_price(&mut env, sol, 120 * USDC);
     repay(&mut env, &hana, second).unwrap();
     let credit: CreditProfile = read(&env.svm, &credit_pda(&hana.kp.pubkey()));
-    assert_eq!(credit.on_time_repaid, 607_500_000);
+    assert_eq!(credit.on_time_repaid, 615 * USDC);
     assert_eq!(credit.bonus_bps(), 500);
 
-    // Installment 3 is left unpaid past its grace period and collected from collateral: the record resets.
-    advance(&mut env, 31 * DAY + 1);
+    // Installment 4 (due day 78) is left unpaid past its grace period and collected from collateral: the record resets.
+    advance(&mut env, 23 * DAY + 1);
     set_price(&mut env, sol, 120 * USDC);
     let keeper = new_user(&mut env, 0, 10_000 * USDC);
     collect_overdue(&mut env, &keeper, &hana, second).unwrap();
@@ -760,9 +780,9 @@ fn on_time_repayments_raise_the_credit_limit() {
     assert_eq!(credit.on_time_repaid, 0);
     assert_eq!(credit.resets, 1);
 
-    // Back to 50%: ~8.61 SOL = $1,033 → $516 limit, $157.50 owed. At 55% this would have fit.
-    assert!(checkout(&mut env, &hana, &m, merchant_usdc, 380 * USDC).is_err());
-    checkout(&mut env, &hana, &m, merchant_usdc, 350 * USDC).unwrap();
+    // Back to 50%: ~8.61 SOL = $1,033 → $516 limit. At 55% ($568) this would have fit.
+    assert!(checkout(&mut env, &hana, &m, merchant_usdc, 540 * USDC).is_err());
+    checkout(&mut env, &hana, &m, merchant_usdc, 516 * USDC).unwrap();
 }
 
 #[test]
@@ -878,4 +898,35 @@ fn anyone_can_refresh_price_from_pyth() {
     // Assets without a configured feed only accept keeper prices.
     let zec_update = post_update(&mut env, price_update([0u8; 32], 30_000_000_000, 1_000_000, -8, now - 10, true), PYTH_RECEIVER_ID);
     assert!(refresh(&mut env, zec, zec_update).is_err());
+}
+
+/// Needs `cargo build-sbf --features mainnet --sbf-out-dir target/mainnet` (CI runs it).
+#[test]
+fn mainnet_build_prices_from_pyth_only() {
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/../mainnet/hodlpay.so");
+    let Ok(bytes) = std::fs::read(path) else {
+        eprintln!("skipped: {path} not built");
+        return;
+    };
+    let mut env = setup_with(&bytes);
+    let sol = env.sol;
+    let admin = env.admin.insecure_clone();
+    let keeper_price = ix(
+        hodlpay::instruction::UpdatePrice { price_e6: 1 },
+        hodlpay::accounts::UpdatePrice {
+            keeper: admin.pubkey(),
+            config: pda(&[CONFIG_SEED]),
+            asset: pda(&[ASSET_SEED, sol.as_ref()]),
+        },
+        &[],
+    );
+    let err = send(&mut env.svm, keeper_price, &[&admin]).unwrap_err();
+    assert!(err.contains("KeeperPricesDisabled"), "{err}");
+
+    advance(&mut env, 10);
+    let now = env.svm.get_sysvar::<anchor_lang::prelude::Clock>().unix_timestamp;
+    let update = post_update(&mut env, price_update(SOL_FEED, 9_000_000_000, 1_000_000, -8, now, true), PYTH_RECEIVER_ID);
+    refresh(&mut env, sol, update).unwrap();
+    let a: hodlpay::state::CollateralAsset = read(&env.svm, &pda(&[ASSET_SEED, sol.as_ref()]));
+    assert_eq!(a.price_e6, 90 * USDC);
 }

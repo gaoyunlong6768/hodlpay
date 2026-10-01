@@ -160,8 +160,9 @@ pub struct Repay<'info> {
 /// Pays the next installment. Any credit left by a liquidation is applied first.
 /// Past the grace period a late fee is added, paid in cash to liquidity providers.
 /// Each installment also releases its share of the merchant fee to LPs.
-/// Cash paid on time after the checkout installment builds the credit record;
-/// a late payment resets it.
+/// Cash paid on time after the checkout installment builds the credit record, if paid
+/// within `CREDIT_WINDOW` of its due date; earlier prepayments are accepted but build
+/// nothing. A late payment resets the record.
 pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     let due = ctx.accounts.loan.next_installment()?;
     let now = Clock::get()?.unix_timestamp;
@@ -179,7 +180,7 @@ pub fn handle_repay(ctx: Context<Repay>) -> Result<()> {
     }
     if cash > 0 && late {
         credit.reset();
-    } else if cash > 0 && ctx.accounts.loan.installments_paid > 0 {
+    } else if cash > 0 && ctx.accounts.loan.installments_paid > 0 && ctx.accounts.loan.in_credit_window(now) {
         credit.record_on_time(cash);
     }
 

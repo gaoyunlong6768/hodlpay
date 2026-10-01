@@ -183,7 +183,9 @@ pub struct UpdatePrice<'info> {
     pub asset: Account<'info, CollateralAsset>,
 }
 
+/// Devnet only: the `mainnet` build prices assets from Pyth alone.
 pub fn handle_update_price(ctx: Context<UpdatePrice>, price_e6: u64) -> Result<()> {
+    require!(!cfg!(feature = "mainnet"), ErrorCode::KeeperPricesDisabled);
     require!(price_e6 > 0, ErrorCode::InvalidPrice);
     let asset = &mut ctx.accounts.asset;
     asset.price_e6 = price_e6;
