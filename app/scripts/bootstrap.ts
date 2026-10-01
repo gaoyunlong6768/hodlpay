@@ -28,6 +28,9 @@ const MAINNET_REQUIRED = ["HODLPAY_RPC", "USDC_MINT", "ZEC_MINT", "TREASURY", "M
 if (MAINNET) {
   const missing = MAINNET_REQUIRED.filter((k) => !process.env[k]);
   if (missing.length) throw new Error(`mainnet bootstrap needs ${missing.join(", ")}`);
+  if (!process.env.ADMIN_KEYPAIR) throw new Error("mainnet bootstrap needs ADMIN_KEYPAIR (the offline admin key file)");
+  // Every signer must be the admin key file, not a keeper key from the environment.
+  delete process.env.ADMIN_SECRET_KEY;
   process.env.SOLANA_RPC = process.env.HODLPAY_RPC;
   process.env.NEXT_PUBLIC_HODLPAY_CLUSTER = "mainnet";
 }
@@ -51,14 +54,6 @@ async function main() {
   );
   const conn = new Connection(rpc, "confirmed");
   console.log(`cluster ${cluster} (${MAINNET ? CLUSTERS.mainnet : rpc}), admin ${admin.publicKey.toBase58()}`);
-  if (MAINNET) {
-    const need = Number(process.env.RESERVE_USDC) + Number(process.env.LIQUIDITY_USDC);
-    const usdcAta = getAssociatedTokenAddressSync(new PublicKey(process.env.USDC_MINT!), admin.publicKey);
-    const usdc = await conn.getTokenAccountBalance(usdcAta).then((b) => Number(b.value.uiAmount), () => 0);
-    const sol = (await conn.getBalance(admin.publicKey)) / LAMPORTS_PER_SOL;
-    console.log(`admin holds ${usdc} USDC (needs ${need}) and ${sol} SOL (needs 0.2)`);
-    if (usdc < need || sol < 0.2) throw new Error("fund the admin wallet first");
-  }
 
   // On mainnet, pass the real mints: USDC_MINT=EPjF…Dt1v ZEC_MINT=JDt9rRGaieF6aN1cJkXFeUmsy7ZE4yY3CZb8tVMXVroS
   const usdcKp = loadOrCreate("usdc-mint");
@@ -103,6 +98,20 @@ async function main() {
   const { adminProgram, send } = await import("../src/lib/server/admin");
   const { getPrices } = await import("../src/lib/prices");
   const { program: p } = adminProgram();
+
+  if (MAINNET) {
+    // Only what this run will still deposit; re-runs that change caps or the split need no USDC.
+    const reserveDone = !!(await p.account.protocol.fetchNullable(hp.pdas.protocol()))?.reserveFunded.gtn(0);
+    const pooled = await conn.getTokenAccountBalance(hp.pdas.liquidity()).then((b) => Number(b.value.uiAmount), () => 0);
+    const need =
+      (reserveDone ? 0 : Number(process.env.RESERVE_USDC)) +
+      (pooled >= Number(process.env.LIQUIDITY_USDC) / 2 ? 0 : Number(process.env.LIQUIDITY_USDC));
+    const usdcAta = getAssociatedTokenAddressSync(usdcMint, admin.publicKey);
+    const usdc = await conn.getTokenAccountBalance(usdcAta).then((b) => Number(b.value.uiAmount), () => 0);
+    const sol = (await conn.getBalance(admin.publicKey)) / LAMPORTS_PER_SOL;
+    console.log(`admin holds ${usdc} USDC (needs ${need}) and ${sol} SOL (needs 0.2)`);
+    if (usdc < need || sol < 0.2) throw new Error("fund the admin wallet first");
+  }
 
   const merchantFeeBps = 150;
   if (!(await conn.getAccountInfo(hp.pdas.config()))) {

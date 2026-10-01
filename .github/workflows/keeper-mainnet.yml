@@ -1,0 +1,18 @@
+name: Keeper (mainnet beta)
+
+# Idle until the repository variable HODLPAY_MAINNET_URL is set (docs/mainnet-runbook.md).
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    name: Refresh Pyth prices, liquidate, collect overdue installments
+    if: ${{ vars.HODLPAY_MAINNET_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$URL/api/cron/keeper"
+        env:
+          URL: ${{ vars.HODLPAY_MAINNET_URL }}
+          CRON_SECRET: ${{ secrets.HODLPAY_MAINNET_CRON_SECRET }}
