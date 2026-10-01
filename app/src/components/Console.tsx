@@ -13,6 +13,7 @@ import {
   advanceDays,
   checkout,
   creditLevel,
+  creditNeeded,
   creditWindowOpens,
   deposit,
   initialState,
@@ -192,6 +193,7 @@ function ChainConsole({ mode, setMode, live }: { mode: Mode; setMode: (m: Mode) 
         <Checkout
           available={m.available}
           cash={view ? view.balances.USDC + view.creditBalance : undefined}
+          prepaid={view?.creditBalance}
           loading={loading}
           busy={busy === "checkout"}
           onPay={guard(async (input: Parameters<typeof actions.checkout>[0]) => {
@@ -694,6 +696,7 @@ function CreditLine({ m, credit, loading }: { m: ReturnType<typeof metrics>; cre
 function Checkout({
   available,
   cash,
+  prepaid = 0,
   loading,
   busy,
   onPay,
@@ -703,6 +706,8 @@ function Checkout({
   available: number;
   /** USDC the shopper can put toward the first installment; unknown in simulation. */
   cash?: number;
+  /** Liquidation credit within `cash`: it settles the first installment without lowering the debt checked. */
+  prepaid?: number;
   loading?: boolean;
   busy?: boolean;
   onPay: (i: { merchant: string; item: string; price: number; rail: Rail }) => void;
@@ -716,6 +721,7 @@ function Checkout({
   const fee = (c.price * PROTOCOL.merchantFeeBps) / 10_000;
   const quarter = c.price / PROTOCOL.installments;
   const paysFirst = cash === undefined || cash >= quarter;
+  const need = creditNeeded(c.price, paysFirst, prepaid);
 
   return (
     <Card title="Checkout" kicker="03 · merchant">
@@ -755,7 +761,7 @@ function Checkout({
 
       <button
         onClick={() => onPay({ ...c, rail })}
-        disabled={loading || c.price > available || busy}
+        disabled={loading || need > available + 1e-9 || busy}
         className="mt-3 w-full bg-ink px-3 py-3 text-sm font-medium text-paper transition hover:bg-mint disabled:cursor-not-allowed disabled:bg-ink/30"
       >
         {busy
@@ -764,15 +770,15 @@ function Checkout({
             : "Paying merchant…"
           : loading
             ? "Loading your credit line…"
-            : c.price > available
-            ? `Need ${usd(c.price - available)} more credit`
+            : need > available + 1e-9
+            ? `Need ${usd(need - available)} more credit`
             : paysFirst
               ? `Pay ${usd(quarter)} today with HodlPay`
               : `Buy now, pay ${usd(quarter)} later`}
       </button>
       <p className="num mt-1.5 text-[11px] text-ink-soft">
         {paysFirst
-          ? `Then 3 × ${usd(quarter)}, every ${PROTOCOL.installmentIntervalDays} days · 0% interest`
+          ? `Then 3 × ${usd(quarter)}, every ${PROTOCOL.installmentIntervalDays} days · 0% interest · uses ${usd(need)} of credit, since today's ${usd(quarter)} is paid upfront`
           : `Not enough USDC for the first ${usd(quarter)} now: it is due today, 3 more every ${PROTOCOL.installmentIntervalDays} days · 0% interest`}
       </p>
       <p className="num mt-0.5 text-[11px] text-ink-soft">

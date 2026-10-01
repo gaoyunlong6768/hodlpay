@@ -245,6 +245,7 @@ export async function buildCheckout(
   merchant: PublicKey,
   amountUsd: number | BN,
   loanIndex: number,
+  payFirst = false,
 ) {
   const position = pdas.position(owner);
   const merchantUsdc = ata(USDC_MINT, merchant);
@@ -263,6 +264,7 @@ export async function buildCheckout(
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         credit: pdas.credit(owner),
+        userUsdc: payFirst ? ata(USDC_MINT, owner) : null,
       })
       .remainingAccounts(assetMetas())
       .instruction(),

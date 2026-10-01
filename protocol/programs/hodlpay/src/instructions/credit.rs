@@ -44,13 +44,28 @@ pub struct Checkout<'info> {
     /// CHECK: the owner's `CreditProfile` PDA; may not exist yet.
     #[account(seeds = [CREDIT_SEED, owner.key().as_ref()], bump)]
     pub credit: UncheckedAccount<'info>,
+    /// If given, the first installment is paid from it in this instruction. It may be
+    /// `merchant_usdc` when shoppers finance a Solana Pay code to their own account.
+    #[account(mut, dup, token::mint = config.usdc_mint, token::authority = owner)]
+    pub user_usdc: Option<Box<Account<'info, TokenAccount>>>,
 }
 
 /// Remaining accounts: the `CollateralAsset` of every non-empty slot in the position.
+/// With `user_usdc`, the first installment is paid at checkout and the credit limit
+/// only has to cover the debt left after it, so a purchase needs 25% less collateral.
 pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::ZeroAmount);
     let now = Clock::get()?.unix_timestamp;
     let config = &ctx.accounts.config;
+    let installments = config.installments;
+
+    let first = if installments == 1 { amount } else { amount / installments as u64 };
+    let (first_from_credit, first_cash) = if ctx.accounts.user_usdc.is_some() {
+        let from_credit = first.min(ctx.accounts.position.credit_balance);
+        (from_credit, first - from_credit)
+    } else {
+        (0, 0)
+    };
 
     let v = valuate(
         &ctx.accounts.position,
@@ -66,7 +81,7 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
         .debt
         .checked_add(amount)
         .ok_or(ErrorCode::Overflow)?;
-    require!(new_debt <= v.borrow_limit, ErrorCode::InsufficientCredit);
+    require!(new_debt - first_cash <= v.borrow_limit, ErrorCode::InsufficientCredit);
 
     let fee = apply_bps(amount, config.merchant_fee_bps);
     let merchant_received = amount - fee;
@@ -84,7 +99,6 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
         merchant_received,
     )?;
 
-    let installments = config.installments;
     let loan_key = ctx.accounts.loan.key();
     let position_key = ctx.accounts.position.key();
     let loan = &mut ctx.accounts.loan;
@@ -118,6 +132,32 @@ pub fn handle_checkout(ctx: Context<Checkout>, amount: u64) -> Result<()> {
         principal: amount,
         merchant_received,
     });
+
+    if let Some(user_usdc) = &ctx.accounts.user_usdc {
+        if first_cash > 0 {
+            token::transfer(
+                CpiContext::new(
+                    token::ID,
+                    Transfer {
+                        from: user_usdc.to_account_info(),
+                        to: ctx.accounts.liquidity_vault.to_account_info(),
+                        authority: ctx.accounts.owner.to_account_info(),
+                    },
+                ),
+                first_cash,
+            )?;
+        }
+        let a = &mut *ctx.accounts;
+        settle_installment(&mut a.config, &mut a.position, &mut a.loan, first, first_from_credit, 0);
+        emit!(RepayEvent {
+            owner: a.position.owner,
+            loan: loan_key,
+            installment: a.loan.installments_paid,
+            paid: first_cash,
+            from_credit: first_from_credit,
+            late_fee: 0,
+        });
+    }
     Ok(())
 }
 

@@ -320,6 +320,15 @@ export type Hodlpay = {
               }
             ]
           }
+        },
+        {
+          "name": "userUsdc",
+          "docs": [
+            "If given, the first installment is paid from it in this instruction. It may be",
+            "`merchant_usdc` when shoppers finance a Solana Pay code to their own account."
+          ],
+          "writable": true,
+          "optional": true
         }
       ],
       "args": [

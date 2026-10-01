@@ -76,8 +76,7 @@ async function main() {
     const tempoSig = await send(
       p,
       hp.tx(
-        ...(await hp.buildCheckout(p, user.publicKey, bridge, 50, 1)),
-        ...(await hp.buildRepay(p, user.publicKey, 1)),
+        ...(await hp.buildCheckout(p, user.publicKey, bridge, 50, 1, true)),
         hp.buildTempoMemo(hp.TEMPO.merchants.Bluebottle),
       ),
     );

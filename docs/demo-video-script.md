@@ -18,8 +18,8 @@ Show the console header: devnet, live oracle prices, the demo wallet.
 
 **0:10 – 0:25 · Lock collateral**
 
-Lock 2 zenZEC (enough for the $1,240 desk; if credit is still short, the checkout page locks the rest itself). Point at the Credit line card.
-"SOL gets a 50% max loan-to-value, zenZEC 40% because it's thinner. No application and no personal data: the collateral is the credit check."
+Lock 2 zenZEC (enough for the $1,240 desk, which uses only $930 of credit because the first $310 is paid at checkout; if credit is still short, the checkout page locks the rest itself). Point at the Credit line card.
+"SOL gets a 50% max loan-to-value, zenZEC 40% because it's thinner. No application and no personal data: the collateral is the credit check. And since my first installment is paid at checkout, I only lock collateral for the three that are left."
 
 **0:25 – 0:48 · A merchant payment link**
 
@@ -62,4 +62,4 @@ Show the Lend card: share price and fees earned.
 
 ## Optional terminal cut (10 seconds)
 
-Show `cargo test -p hodlpay` (11 LiteSVM tests passing, including the credit ladder and its due-date window, overdue collection, the Pyth price refresh, the Pyth-only mainnet build and the real mainnet zenZEC mint). If you add it, cut the Lend card shot to stay under 3 minutes.
+Show `cargo test -p hodlpay` (12 LiteSVM tests passing, including the credit ladder and its due-date window, the 25% lower collateral when the first installment is paid at checkout, overdue collection, the Pyth price refresh, the Pyth-only mainnet build and the real mainnet zenZEC mint). If you add it, cut the Lend card shot to stay under 3 minutes.

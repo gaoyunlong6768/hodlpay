@@ -49,6 +49,7 @@ Protocol take rate (future): a share of the merchant fee (e.g. 20%) to the treas
 
 ## Risks and answers
 
+- **Capital efficiency**: collateral must exceed the purchase, so the market is holders who won't sell, not everyone. We cut what they lock: the first installment is paid inside checkout, so only the remaining 75% counts against the limit ($1,500 of SOL for a $1,000 purchase instead of $2,000), and on-time repayments lower it to $1,250.
 - **Collateral crash**: per-asset LTV tiers, margin alerts before liquidation, 50% close factor, 5% bonus for liquidators, stale-price guard.
 - **Liquidity crunch**: withdrawals limited to idle liquidity; utilization shown in the pool; pool cap during beta.
 - **Regulation**: users borrow against their own assets with no interest in the base product; merchants receive stablecoins. KYC at checkout thresholds when we move to fiat-facing merchants.

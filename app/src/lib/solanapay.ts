@@ -7,7 +7,6 @@ import {
   USDC_MINT,
   ata,
   buildCheckout,
-  buildRepay,
   type HodlpayProgram,
 } from "@/lib/hodlpay";
 
@@ -110,9 +109,8 @@ export async function buildSolanaPayCheckout(
   const recipientUsdc = ata(USDC_MINT, req.recipient);
   const ixs: TransactionInstruction[] = [
     createAssociatedTokenAccountIdempotentInstruction(owner, recipientUsdc, req.recipient, USDC_MINT),
-    ...(await buildCheckout(p, owner, owner, new BN(principal.toString()), loanIndex)),
+    ...(await buildCheckout(p, owner, owner, new BN(principal.toString()), loanIndex, payFirst)),
   ];
-  if (payFirst) ixs.push(...(await buildRepay(p, owner, loanIndex)));
   if (req.memo) ixs.push(new TransactionInstruction({ programId: MEMO_PROGRAM_ID, keys: [], data: Buffer.from(req.memo, "utf8") }));
   const transfer = createTransferCheckedInstruction(ownerUsdc, USDC_MINT, recipientUsdc, owner, amount, USDC_DECIMALS);
   transfer.keys.push(...req.reference.map((pubkey) => ({ pubkey, isSigner: false, isWritable: false })));

@@ -426,9 +426,8 @@ export function useOnchain() {
         const solanaPayTo = input.payTo ? new PublicKey(input.payTo) : MERCHANTS[input.merchant];
         if (!tempo && !solanaPayTo) throw new Error("Merchant has no Solana payout wallet");
         const payee = tempo ? new PublicKey(hp.DEPLOYMENT.tempoBridge!) : solanaPayTo;
-        const ixs = await hp.buildCheckout(program!, publicKey!, payee, input.price, pos.loanCount);
         const firstPaid = cash + pos.creditBalance >= input.price / 4;
-        if (firstPaid) ixs.push(...(await hp.buildRepay(program!, publicKey!, pos.loanCount)));
+        const ixs = await hp.buildCheckout(program!, publicKey!, payee, input.price, pos.loanCount, firstPaid);
         if (tempo) ixs.push(hp.buildTempoMemo(tempoPayTo));
         const sig = await send(ixs);
         const meta = load<Record<string, LoanMeta>>(metaKey, {});

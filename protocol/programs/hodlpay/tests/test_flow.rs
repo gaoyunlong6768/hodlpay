@@ -230,6 +230,12 @@ fn checkout(env: &mut Env, u: &User, merchant: &Pubkey, merchant_usdc: Pubkey, a
     checkout_valued(env, u, merchant, merchant_usdc, amount, &assets)
 }
 
+/// Checkout that pays the first installment in the same instruction.
+fn checkout_paying_first(env: &mut Env, u: &User, merchant: &Pubkey, merchant_usdc: Pubkey, amount: u64) -> Result<Pubkey, String> {
+    let assets = [pda(&[ASSET_SEED, env.sol.as_ref()]), pda(&[ASSET_SEED, env.zec.as_ref()])];
+    checkout_with(env, u, merchant, merchant_usdc, amount, &assets, Some(u.usdc_ata))
+}
+
 fn checkout_valued(
     env: &mut Env,
     u: &User,
@@ -237,6 +243,18 @@ fn checkout_valued(
     merchant_usdc: Pubkey,
     amount: u64,
     assets: &[Pubkey],
+) -> Result<Pubkey, String> {
+    checkout_with(env, u, merchant, merchant_usdc, amount, assets, None)
+}
+
+fn checkout_with(
+    env: &mut Env,
+    u: &User,
+    merchant: &Pubkey,
+    merchant_usdc: Pubkey,
+    amount: u64,
+    assets: &[Pubkey],
+    user_usdc: Option<Pubkey>,
 ) -> Result<Pubkey, String> {
     let p: Position = read(&env.svm, &u.position);
     let loan = pda(&[LOAN_SEED, u.position.as_ref(), &p.loan_count.to_le_bytes()]);
@@ -255,6 +273,7 @@ fn checkout_valued(
                 token_program: anchor_spl::token::ID,
                 system_program: anchor_lang::system_program::ID,
                 credit: credit_pda(&u.kp.pubkey()),
+                user_usdc,
             },
             assets,
         ),
@@ -783,6 +802,55 @@ fn on_time_repayments_raise_the_credit_limit() {
     // Back to 50%: ~8.61 SOL = $1,033 → $516 limit. At 55% ($568) this would have fit.
     assert!(checkout(&mut env, &hana, &m, merchant_usdc, 540 * USDC).is_err());
     checkout(&mut env, &hana, &m, merchant_usdc, 516 * USDC).unwrap();
+}
+
+#[test]
+fn paying_the_first_installment_at_checkout_needs_less_collateral() {
+    let mut env = setup();
+    let jo = new_user(&mut env, 10 * SOL, 1_000 * USDC);
+    let broke = new_user(&mut env, 10 * SOL, 0);
+    let merchant = Keypair::new();
+    let merchant_usdc = CreateAssociatedTokenAccount::new(&mut env.svm, &env.admin, &env.usdc)
+        .owner(&merchant.pubkey())
+        .send()
+        .unwrap();
+    let (m, sol) = (merchant.pubkey(), env.sol);
+    let assets = [pda(&[ASSET_SEED, sol.as_ref()]), pda(&[ASSET_SEED, env.zec.as_ref()])];
+    for u in [&jo, &broke] {
+        move_collateral(&mut env, u, sol, u.sol_ata, 10 * SOL, false).unwrap();
+    }
+
+    // 10 SOL @ $120 at 50%: $600 of credit. Financing the full $800 does not fit...
+    assert!(checkout(&mut env, &jo, &m, merchant_usdc, 800 * USDC).is_err());
+    // ...but with $200 paid in the same instruction only $600 is owed afterwards, which does.
+    assert!(checkout_paying_first(&mut env, &jo, &m, merchant_usdc, 801 * USDC).is_err());
+    let pool_before = balance(&env.svm, &pda(&[LIQUIDITY_SEED]));
+    let loan = checkout_paying_first(&mut env, &jo, &m, merchant_usdc, 800 * USDC).unwrap();
+
+    let l: Loan = read(&env.svm, &loan);
+    assert_eq!(l.installments_paid, 1);
+    assert_eq!(l.repaid, 200 * USDC);
+    assert_eq!(l.fee_earned, l.fee / 4);
+    let p: Position = read(&env.svm, &jo.position);
+    assert_eq!(p.debt, 600 * USDC);
+    assert_eq!(balance(&env.svm, &jo.usdc_ata), 800 * USDC);
+    assert_eq!(pool_before - balance(&env.svm, &pda(&[LIQUIDITY_SEED])), l.merchant_received - 200 * USDC);
+
+    // Paying first needs the cash: without it the checkout fails rather than over-lending.
+    assert!(checkout_with(&mut env, &broke, &m, merchant_usdc, 800 * USDC, &assets, Some(broke.usdc_ata)).is_err());
+
+    // The rest of the schedule is unchanged: installment 2 is due in 14 days.
+    repay(&mut env, &jo, loan).unwrap();
+    let l: Loan = read(&env.svm, &loan);
+    assert_eq!(l.installments_paid, 2);
+    assert_eq!(l.next_due_at, l.created_at + 28 * DAY);
+
+    // Solana Pay path: the plan pays the shopper's own USDC account, which also pays the first installment.
+    let before = balance(&env.svm, &jo.usdc_ata);
+    let own = checkout_paying_first(&mut env, &jo, &jo.kp.pubkey(), jo.usdc_ata, 40 * USDC).unwrap();
+    let l: Loan = read(&env.svm, &own);
+    assert_eq!(balance(&env.svm, &jo.usdc_ata), before + l.merchant_received - 10 * USDC);
+    assert_eq!(l.installments_paid, 1);
 }
 
 #[test]

@@ -5,7 +5,7 @@ import Link from "next/link";
 import WalletProviders from "@/components/WalletProviders";
 import { Card, Row, WalletBar } from "@/components/ui";
 import { TEMPO, explorerAddress, explorerTx, tempoExplorerTx } from "@/lib/hodlpay";
-import { ASSETS, NO_CREDIT, PROTOCOL, maxLtvFor, metrics, usd, type AssetId } from "@/lib/engine";
+import { ASSETS, NO_CREDIT, PROTOCOL, creditNeeded, maxLtvFor, metrics, usd, type AssetId } from "@/lib/engine";
 import type { PayRequest } from "@/lib/paylink";
 import { planTotal } from "@/lib/solanapay";
 import { useOnchain } from "@/lib/useOnchain";
@@ -105,7 +105,10 @@ function Pay({ r }: { r: PayRequest }) {
   const m = view ? metrics(view.state, view.debt) : null;
   const credit = view?.state.credit ?? NO_CREDIT;
   const available = m?.available ?? 0;
-  const shortfall = Math.max(0, total - available);
+  const quarter = total / PROTOCOL.installments;
+  const paysFirst = !view || view.balances.USDC + view.creditBalance >= quarter;
+  const creditUse = creditNeeded(total, paysFirst, view?.creditBalance);
+  const shortfall = Math.max(0, creditUse - available);
   const plan = (id: AssetId) => {
     const price = view?.state.prices[id] ?? 0;
     const need = price ? Math.ceil(((shortfall * 1.02) / (price * maxLtvFor(id, credit))) * 1e4) / 1e4 : 0;
@@ -115,8 +118,6 @@ function Pay({ r }: { r: PayRequest }) {
   const ids = Object.keys(ASSETS) as AssetId[];
   const asset = picked ?? ids.find((id) => plan(id).need <= plan(id).has) ?? "SOL";
   const { price, need, has: walletHas } = plan(asset);
-  const quarter = total / PROTOCOL.installments;
-  const paysFirst = !view || view.balances.USDC + view.creditBalance >= quarter;
   const step = !chain.owner ? 1 : shortfall > 0 ? 2 : 3;
 
   return (
@@ -143,6 +144,7 @@ function Pay({ r }: { r: PayRequest }) {
           <>
             <Row k="Available credit" v={usd(available)} strong />
             <Row k={r.solanaPay ? "This plan" : "This purchase"} v={usd(total)} />
+            {creditUse < total && <Row k="Credit it uses (first installment paid today)" v={usd(creditUse)} />}
             {shortfall > 0 ? (
               <div className="dash mt-3 pt-3">
                 <p className="text-sm">

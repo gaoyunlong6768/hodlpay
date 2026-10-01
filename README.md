@@ -35,7 +35,7 @@ Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchan
 
 1. **Lock**: deposit SOL or zenZEC into an on-chain vault. Each asset has its own risk tier.
 2. **Pay**: at checkout the protocol pays the merchant from the liquidity pool, minus a 1.5% merchant fee. The merchant chooses the rail: USDC on Solana, or a TIP-20 stablecoin on Tempo.
-3. **Repay**: 4 installments, 14 days apart, 0% interest for the user. The first is paid in the checkout transaction itself (if the wallet holds too little USDC, it stays due that day). Paying more than 3 days after a due date adds a 1% late fee on that installment.
+3. **Repay**: 4 installments, 14 days apart, 0% interest for the user. The first is paid inside the `checkout` instruction itself, so the credit limit only has to cover the other three (if the wallet holds too little USDC, the first stays due that day and the full price counts against the limit). Paying more than 3 days after a due date adds a 1% late fee on that installment.
 4. **Missed payment**: an installment still unpaid 3 days after its due date is collected from the borrower's collateral. `collect_overdue` is permissionless: the collector pays the installment plus the 1% late fee into the pool and receives collateral worth that amount plus the 5% bonus. The loan moves on to its next installment and the rest of the position is untouched, so a missed payment costs the borrower about 6% of one installment instead of a liquidation. The keeper runs it every hour.
 5. **Protect**: the keeper posts oracle prices and emits a margin alert first; only past the liquidation line can a liquidator repay part of the debt (max 50% per call) and take collateral at a 5% bonus. Repaid amounts are credited to the user's upcoming installments.
 
@@ -43,6 +43,15 @@ Merchants can generate a payment link and QR code at [hodlpay.vercel.app/merchan
 | ------ | ------- | ------------ | ----------- |
 | SOL    | 50%     | 65%          | 75%         |
 | zenZEC | 40%     | 55%          | 65%         |
+
+Collateral needed for a $1,000 purchase, with the first $250 paid at checkout (only the $750 still owed counts against the limit):
+
+| Collateral | No history | Credit level 4 |
+| ---------- | ---------- | -------------- |
+| SOL        | $1,500     | $1,250         |
+| zenZEC     | $1,875     | $1,500         |
+
+Financing the full $1,000 against the limit, as most collateralized credit does, would need $2,000 of SOL. The risk is the same: the position never owes more than its collateral covers at max LTV.
 
 ### On-time credit ladder
 

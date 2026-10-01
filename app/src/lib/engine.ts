@@ -58,6 +58,15 @@ export function creditLevel(c: CreditRecord): number {
   return Math.min(PROTOCOL.credit.maxLevel, Math.floor(c.onTimeRepaid / PROTOCOL.credit.stepUsd + 1e-9));
 }
 
+/**
+ * Credit a purchase uses. A first installment paid at checkout is paid in the same
+ * instruction, so the program only checks the debt left after it.
+ */
+export function creditNeeded(price: number, paysFirst: boolean, creditBalance = 0): number {
+  if (!paysFirst) return price;
+  return price - Math.max(0, price / PROTOCOL.installments - creditBalance);
+}
+
 /** Max LTV for new credit: the asset's base, raised by the credit level, kept below its margin line. */
 export function maxLtvFor(id: AssetId, c: CreditRecord): number {
   const a = ASSETS[id];
@@ -216,7 +225,7 @@ export function checkout(
 ): State {
   const m = metrics(s);
   if (!(input.price > 0)) throw new Error("Price must be positive");
-  if (input.price > m.available + 1e-9) {
+  if (creditNeeded(input.price, true) > m.available + 1e-9) {
     throw new Error(`Not enough credit: ${usd(m.available)} available`);
   }
   const fee = (input.price * PROTOCOL.merchantFeeBps) / 10_000;
