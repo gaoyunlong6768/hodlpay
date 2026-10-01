@@ -12,7 +12,8 @@ jobs:
     if: ${{ vars.HODLPAY_MAINNET_URL != '' }}
     runs-on: ubuntu-latest
     steps:
-      - run: curl -fsS --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$URL/api/cron/keeper"
+      - run: |
+          curl -fsS --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$URL/api/cron/keeper"
         env:
           URL: ${{ vars.HODLPAY_MAINNET_URL }}
           CRON_SECRET: ${{ secrets.HODLPAY_MAINNET_CRON_SECRET }}
