@@ -143,7 +143,9 @@ const CONTRACTS: { address: Hex; deployBlock: number; version: number }[] = [
   ...(tempo.legacy ?? []).map((l) => ({ address: l.settlement as Hex, deployBlock: l.deployBlock, version: 1 })),
 ];
 
-const tempoClient = () => createPublicClient({ chain: tempoModerato, transport: http(tempo.rpc) });
+/** The public Tempo RPC rate-limits bursts; viem retries -32005 with exponential backoff. */
+const tempoTransport = () => http(tempo.rpc, { retryCount: 6, retryDelay: 250 });
+const tempoClient = () => createPublicClient({ chain: tempoModerato, transport: tempoTransport() });
 
 export interface TempoSettlement {
   hash: Hex;
@@ -155,36 +157,54 @@ export interface TempoSettlement {
   contract: Hex;
 }
 
-/** Settlements paid by every HodlPay settlement contract matching the indexed filter, newest first. */
+const getSettled = (pub: ReturnType<typeof tempoClient>, address: Hex, fromBlock: bigint, toBlock: bigint) =>
+  pub.getLogs({ address, event: SETTLED, fromBlock, toBlock });
+type SettledLog = Awaited<ReturnType<typeof getSettled>>[number];
+
+/** Logs of chunks that ended below the head when read; final, so kept for the life of the instance. */
+const closedChunks = new Map<string, SettledLog[]>();
+const blockTimes = new Map<bigint, number>();
+
+/**
+ * Settlements paid by every HodlPay settlement contract matching the filter, newest first.
+ * The RPC caps a log query at LOG_SPAN blocks, so the range is read in chunks, a few at a time.
+ */
 async function settlements(args: { merchant?: Hex; checkoutRef?: Hex }): Promise<TempoSettlement[]> {
   const pub = tempoClient();
   const latest = await pub.getBlockNumber();
-  const queries: Promise<{ contract: Hex; logs: Awaited<ReturnType<typeof pub.getLogs<typeof SETTLED>>> }>[] = [];
+  const chunks: { contract: Hex; from: bigint; to: bigint }[] = [];
   for (const c of CONTRACTS) {
     for (let from = BigInt(c.deployBlock ?? 0); from <= latest; from += LOG_SPAN) {
       const to = from + LOG_SPAN - BigInt(1);
-      queries.push(
-        pub
-          .getLogs({ address: c.address, event: SETTLED, args, fromBlock: from, toBlock: to < latest ? to : latest })
-          .then((logs) => ({ contract: c.address, logs })),
-      );
+      chunks.push({ contract: c.address, from, to: to < latest ? to : latest });
     }
   }
-  const found = (await Promise.all(queries)).flatMap(({ contract, logs }) => logs.map((l) => ({ contract, l })));
-  const blocks = new Map<bigint, number>();
-  await Promise.all(
-    [...new Set(found.map(({ l }) => l.blockNumber))].map(async (n) =>
-      blocks.set(n, Number((await pub.getBlock({ blockNumber: n })).timestamp)),
-    ),
-  );
+  const read = await mapLimit(chunks, 3, async ({ contract, from, to }) => {
+    const key = `${contract}:${from}:${to}`;
+    let logs = closedChunks.get(key);
+    if (!logs) {
+      logs = await getSettled(pub, contract, from, to);
+      if (to < latest) closedChunks.set(key, logs);
+    }
+    return logs.map((l) => ({ contract, l }));
+  });
+  const found = read
+    .flat()
+    .filter(
+      ({ l }) =>
+        (!args.merchant || getAddress(l.args.merchant!) === getAddress(args.merchant)) &&
+        (!args.checkoutRef || l.args.checkoutRef!.toLowerCase() === args.checkoutRef.toLowerCase()),
+    );
+  const missing = [...new Set(found.map(({ l }) => l.blockNumber!))].filter((n) => !blockTimes.has(n));
+  await mapLimit(missing, 3, async (n) => blockTimes.set(n, Number((await pub.getBlock({ blockNumber: n })).timestamp)));
   return found
     .map(({ contract, l }) => ({
-      hash: l.transactionHash,
+      hash: l.transactionHash!,
       block: Number(l.blockNumber),
       checkoutRef: l.args.checkoutRef!,
       merchant: l.args.merchant!,
       amount: Number(formatUnits(l.args.amount!, 6)),
-      at: blocks.get(l.blockNumber)! * 1000,
+      at: blockTimes.get(l.blockNumber!)! * 1000,
       contract,
     }))
     .sort((a, b) => b.block - a.block);
@@ -199,8 +219,16 @@ export async function settleOnTempo(sig: string) {
   const amount = Number(formatUnits(receipt.units, 6));
   const base = { amount, token: tempo.tokenSymbol, merchant: receipt.merchant, checkoutRef };
 
-  const [done] = await settlements({ checkoutRef });
-  if (done) return { ...base, hash: done.hash, amount: done.amount };
+  const paid = await tempoClient().readContract({
+    address: tempo.settlement as Hex,
+    abi: tempo.abi as Abi,
+    functionName: "settled",
+    args: [checkoutRef],
+  });
+  if (paid) {
+    const [done] = await settlements({ checkoutRef });
+    if (done) return { ...base, hash: done.hash, amount: done.amount };
+  }
 
   const keys = attesterKeys();
   const rpcs = attesterRpcs();
@@ -215,7 +243,7 @@ export async function settleOnTempo(sig: string) {
   }
 
   const account = privateKeyToAccount(relayerKey());
-  const transport = http(tempo.rpc);
+  const transport = tempoTransport();
   const pub = createPublicClient({ chain: tempoModerato, transport });
   const wallet = createWalletClient({ account, chain: tempoModerato, transport });
   const hash = await wallet.writeContract({

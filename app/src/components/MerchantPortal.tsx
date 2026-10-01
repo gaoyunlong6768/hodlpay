@@ -512,10 +512,11 @@ function Sales({ profile }: { profile: Profile }) {
                 <li key={s.loan} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 sm:flex-nowrap">
                   <span className="w-24 shrink-0 text-ink-soft">{when(s.at)}</span>
                   <span className="order-last basis-full sm:order-none sm:flex-1 sm:basis-auto">
-                    shopper{" "}
+                    order{" "}
                     <a className="underline decoration-dotted" href={hp.explorerAddress(s.loan)} target="_blank" rel="noreferrer">
-                      {short(s.shopper)}
+                      {short(s.loan)}
                     </a>
+                    <span className="ml-2 text-ink-soft">shopper {short(s.shopper)}</span>
                     <span className="ml-2 text-ink-soft">
                       repaid {s.paid}/{s.total}
                     </span>

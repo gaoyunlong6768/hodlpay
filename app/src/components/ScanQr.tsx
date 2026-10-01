@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import jsQR from "jsqr";
+import { Keypair } from "@solana/web3.js";
 import { PROTOCOL } from "@/lib/engine";
-import { parseSolanaPay } from "@/lib/solanapay";
+import { encodeSolanaPay, parseSolanaPay } from "@/lib/solanapay";
+import { MERCHANTS } from "@/lib/useOnchain";
 
 export default function ScanQr() {
   const router = useRouter();
@@ -144,6 +147,30 @@ export default function ScanQr() {
         </div>
         {error && <p className="num mt-3 text-[11px] text-vermilion">{error}</p>}
       </div>
+      <p className="num mt-3 text-[11px] text-ink-soft">
+        No code at hand?{" "}
+        <button
+          className="underline decoration-dotted"
+          onClick={() =>
+            go(
+              encodeSolanaPay({
+                recipient: MERCHANTS.Bluebottle,
+                amount: 42.5,
+                reference: [Keypair.generate().publicKey],
+                label: "Bluebottle",
+                message: "Counter order",
+              }),
+            )
+          }
+        >
+          Try a sample code from Bluebottle →
+        </button>{" "}
+        It is the same plain USDC transfer request a point-of-sale app shows; the{" "}
+        <Link href="/merchant" className="underline decoration-dotted">
+          merchant page
+        </Link>{" "}
+        makes a live one and watches for the payment.
+      </p>
     </div>
   );
 }

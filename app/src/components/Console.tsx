@@ -503,6 +503,7 @@ function Vault({
   const [asset, setAsset] = useState<AssetId>(defaultAsset);
   const [amount, setAmount] = useState(defaultAmount);
   const x = Number(amount);
+  const short = balances ? x > balances[asset] + 1e-9 : false;
 
   return (
     <Card title="Vault" kicker="01 · collateral">
@@ -567,10 +568,10 @@ function Vault({
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           onClick={() => onDeposit(asset, x)}
-          disabled={busy}
+          disabled={busy || short}
           className="bg-ink px-3 py-2.5 text-sm font-medium text-paper transition hover:bg-mint disabled:bg-ink/40"
         >
-          {busy ? "Signing…" : "Lock collateral"}
+          {busy ? "Signing…" : short ? `Not enough ${asset} in wallet` : "Lock collateral"}
         </button>
         <button
           onClick={() => onWithdraw(asset, x)}
@@ -679,8 +680,8 @@ function CreditLine({ m, credit, loading }: { m: ReturnType<typeof metrics>; cre
 
       <div className="dash mt-9 pt-3">
         <Row k="Collateral value" v={loading ? <Skel /> : usd(m.collateralValue)} />
-        <Row k="Margin alert at" v={loading ? <Skel /> : usd(m.marginLimit)} />
-        <Row k="Liquidation at" v={loading ? <Skel /> : usd(m.liquidationLimit)} />
+        <Row k="Margin alert once you owe" v={loading ? <Skel /> : usd(m.marginLimit)} />
+        <Row k="Liquidation once you owe" v={loading ? <Skel /> : usd(m.liquidationLimit)} />
         <Row
           k="Price drop to liquidation"
           v={loading ? <Skel className="w-10" /> : m.debt > 0 ? `${(m.dropToLiquidation * 100).toFixed(1)}%` : "—"}
