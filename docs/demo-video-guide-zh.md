@@ -15,7 +15,7 @@
 
 ## 录之前
 
-- Purchases 里能看到两笔 "Installment 1 collected from collateral"（Coffee beans、Coffee subscription）。
+- 第 7 段用的 `FRy8…` 钱包里，Purchases 能看到两笔 "Installment 1 collected from collateral"（Coffee beans、Coffee subscription）。
 - 钱包 USDC 少于 1,500 时，先按 **Get test funds**。
 - Risk desk 滑块在 0。
 - 第二个标签页打开 `/audit`。
@@ -48,6 +48,7 @@
 - 配音意思：这个商户想在 Tempo 上收款。每笔付款要 3 个独立验证方里的 2 个签名，每次结账只付一次，并有每日上限。这个页面会根据 Solana 上的结账记录重新核对每一笔 Tempo 付款。
 
 **第 7 段 · 逾期真实发生（至少 16 秒）**
+- 用哪个钱包：只有原 demo wallet `FRy8…` 有真实的逾期代扣记录，这一段在 Chrome 无痕窗口里用它录（设置方法问 Cursor 里的助手）。其余各段用你平时的钱包。
 - 操作：滚到 Purchases，指着 Coffee beans 和 Coffee subscription 上的 "Installment 1 collected from collateral" → 点账本里 "Installment #1 … was overdue: the keeper paid …" 那一行，打开链上交易。
 - 配音意思：这两期我是故意没还的。三天宽限期一结束，keeper 就从我的抵押品里收走了这两期，外加 1% 滞纳金。没有催收，没有坏账，我的信用等级也清零了。
 
