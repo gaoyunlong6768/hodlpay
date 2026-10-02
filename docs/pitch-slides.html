@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HodlPay · pitch slides</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f2ede2; --paper-2: #e9e2d3; --ink: #16140f; --ink-soft: #5c574c; --rule: #cfc6b3;
+    --mint: #0f7b5a; --amber: #c07a12; --tempo: #2748d8; --receipt: #fbf8f1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--paper); overflow: hidden; }
+  body {
+    color: var(--ink); font-family: "IBM Plex Sans", sans-serif; -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(15,123,90,.07), transparent 40%),
+      radial-gradient(circle at 88% 30%, rgba(210,64,30,.06), transparent 45%);
+  }
+  body.idle { cursor: none; }
+  .serif { font-family: "Instrument Serif", serif; font-weight: 400; }
+  .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  .kicker { font-family: "IBM Plex Mono", monospace; font-size: 22px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-soft); }
+
+  /* 1920x1080 stage, scaled to the window */
+  #stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: center; }
+  .slide { position: absolute; inset: 0; padding: 96px 140px 76px; opacity: 0; pointer-events: none; transition: opacity .35s; display: flex; flex-direction: column; }
+  .slide.on { opacity: 1; pointer-events: auto; }
+  .brand { font-family: "Instrument Serif", serif; font-size: 44px; letter-spacing: -.01em; }
+  .brand i { font-style: italic; }
+  .foot { margin-top: auto; display: flex; align-items: baseline; justify-content: space-between; border-top: 1px solid var(--rule); padding-top: 28px; }
+  .foot .mono { font-size: 20px; color: var(--ink-soft); letter-spacing: .08em; }
+
+  .r { opacity: 0; transform: translateY(18px); }
+  .on .r { animation: rise .8s cubic-bezier(.2,.7,.2,1) forwards; animation-delay: calc(var(--d, 0) * 1s); }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  h1 { font-family: "Instrument Serif", serif; font-weight: 400; font-size: 108px; line-height: .98; letter-spacing: -.02em; margin-top: 26px; }
+  h1 em { font-style: italic; color: var(--mint); }
+
+  /* Slide 1 */
+  .halves { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 90px; margin-top: 64px; }
+  .halves .bar { background: var(--rule); }
+  .half .label { font-family: "IBM Plex Mono", monospace; font-size: 22px; letter-spacing: .16em; text-transform: uppercase; }
+  .half .big { font-family: "Instrument Serif", serif; font-size: 150px; line-height: 1; margin-top: 26px; letter-spacing: -.02em; }
+  .half .big small { font-family: "IBM Plex Sans", sans-serif; font-size: 30px; color: var(--ink-soft); letter-spacing: 0; margin-left: 14px; }
+  .half ul { list-style: none; margin-top: 34px; }
+  .half li { font-size: 31px; line-height: 1.35; padding: 16px 0; border-top: 1px dashed var(--rule); display: flex; gap: 22px; }
+  .half li .mono { min-width: 128px; color: var(--ink); font-weight: 500; }
+  .half li span:last-child { color: var(--ink-soft); }
+
+  /* Slide 2 */
+  .arch { position: relative; margin-top: 52px; height: 540px; }
+  .node { position: absolute; background: var(--receipt); box-shadow: 0 1px 0 var(--rule), 0 18px 40px -24px rgba(22,20,15,.35); padding: 30px 34px; }
+  .node .tag { font-family: "IBM Plex Mono", monospace; font-size: 19px; letter-spacing: .16em; text-transform: uppercase; }
+  .node .t { font-family: "Instrument Serif", serif; font-size: 46px; line-height: 1.02; margin-top: 10px; }
+  .node .s { font-size: 23px; color: var(--ink-soft); line-height: 1.4; margin-top: 12px; }
+  .node.core { border-top: 6px solid var(--mint); }
+  .node.core ul { list-style: none; margin-top: 16px; }
+  .node.core li { font-size: 24px; line-height: 1.3; padding: 10px 0; border-top: 1px dashed var(--rule); }
+  .node.core li b { font-weight: 500; }
+  .node.zec { border-top: 6px solid var(--amber); }
+  .node.tempo { border-top: 6px solid var(--tempo); }
+  .node.sol { border-top: 6px solid var(--ink); }
+  svg.wires { position: absolute; inset: 0; overflow: visible; }
+  svg.wires path { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-dasharray: 600; stroke-dashoffset: 600; }
+  .on svg.wires path { animation: draw .9s ease-out forwards; animation-delay: calc(var(--d) * 1s); }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  svg.wires text { font-family: "IBM Plex Mono", monospace; font-size: 19px; fill: var(--ink-soft); letter-spacing: .06em; }
+
+  /* Slide 3 */
+  .flow { display: grid; grid-template-columns: auto 1fr; gap: 0 70px; margin-top: 56px; align-items: end; }
+  .price .k, .paid .k { font-family: "IBM Plex Mono", monospace; font-size: 22px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); }
+  .price .v { font-family: "Instrument Serif", serif; font-size: 150px; line-height: .9; letter-spacing: -.03em; margin-top: 14px; }
+  .paid .v { font-family: "Instrument Serif", serif; font-size: 64px; margin-top: 10px; }
+  .paid .v span { color: var(--mint); }
+  .split { margin-top: 60px; }
+  .split .head { display: flex; justify-content: space-between; align-items: baseline; }
+  .split .head .mono { font-size: 24px; color: var(--ink-soft); letter-spacing: .1em; }
+  .split .head .serif { font-size: 54px; }
+  .bar3 { display: flex; height: 96px; margin-top: 22px; }
+  .bar3 div { transform: scaleX(0); transform-origin: left; }
+  .on .bar3 div { animation: grow .9s cubic-bezier(.2,.7,.2,1) forwards; animation-delay: calc(var(--d) * 1s); }
+  @keyframes grow { to { transform: none; } }
+  .legend { display: grid; grid-template-columns: 70fr 20fr 10fr; margin-top: 26px; }
+  .legend > div { padding-right: 24px; }
+  .legend .pct { font-family: "IBM Plex Mono", monospace; font-size: 26px; font-weight: 500; }
+  .legend .amt { font-family: "Instrument Serif", serif; font-size: 66px; line-height: 1.05; margin-top: 6px; }
+  .legend .who { font-size: 26px; color: var(--ink-soft); line-height: 1.3; margin-top: 6px; }
+
+  #hint { position: fixed; right: 18px; bottom: 14px; font: 13px "IBM Plex Mono", monospace; color: var(--ink-soft); opacity: .7; transition: opacity .4s; }
+  body.idle #hint { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- 1 · Why me -->
+  <section class="slide" data-n="1">
+    <div class="kicker r">Why me</div>
+    <h1 class="r" style="--d:.1">I&rsquo;ve built both halves<br />of this <em>before.</em></h1>
+    <div class="halves">
+      <div class="half">
+        <div class="label r" style="--d:.45">Buy Now, Pay Later &middot; Hengchang</div>
+        <div class="big r" style="--d:.6">500k+<small>users, zero to launch</small></div>
+        <ul>
+          <li class="r" style="--d:.85"><span class="mono">10k+</span><span>merchants on the platform</span></li>
+          <li class="r" style="--d:1"><span class="mono">+22%</span><span>merchant conversion lift</span></li>
+          <li class="r" style="--d:1.15"><span class="mono">4</span><span>systems: orders, credit limits, settlement, collections</span></li>
+        </ul>
+      </div>
+      <div class="bar"></div>
+      <div class="half">
+        <div class="label r" style="--d:.55">Crypto lending &middot; Babel Finance</div>
+        <div class="big r" style="--d:.7">$1B+<small>AUM platform</small></div>
+        <ul>
+          <li class="r" style="--d:.95"><span class="mono">Lending</span><span>institutional crypto loans and structured products</span></li>
+          <li class="r" style="--d:1.1"><span class="mono">20+</span><span>jurisdictions under the KYC/AML design</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot r" style="--d:1.4">
+      <div class="brand">Hodl<i>Pay</i> <span class="serif" style="color:var(--ink-soft)">&nbsp;= both halves, on-chain.</span></div>
+      <div class="mono">FEIFEI &middot; FOUNDER</div>
+    </div>
+  </section>
+
+  <!-- 2 · Architecture -->
+  <section class="slide" data-n="2">
+    <div class="kicker r">How it works</div>
+    <h1 class="r" style="--d:.1">One checkout, <em>three chains.</em></h1>
+    <div class="arch">
+      <svg class="wires" viewBox="0 0 1640 540" preserveAspectRatio="none">
+        <path style="--d:.9" d="M 380 130 L 540 210" />
+        <path style="--d:.9" d="M 380 410 L 540 330" />
+        <path style="--d:1.5" d="M 1120 210 L 1240 100" />
+        <path style="--d:1.7" d="M 1120 330 L 1240 410" />
+        <text x="400" y="275">LOCK</text>
+        <text x="1128" y="275">PAY</text>
+      </svg>
+      <div class="node r" style="--d:.4; left:0; top:30px; width:380px; border-top:6px solid var(--ink)">
+        <div class="tag">Shopper</div>
+        <div class="t">Locks SOL</div>
+        <div class="s">No credit check, no personal data. Repays in 4, interest-free.</div>
+      </div>
+      <div class="node zec r" style="--d:.55; left:0; top:310px; width:380px">
+        <div class="tag" style="color:var(--amber)">Zcash</div>
+        <div class="t">or zenZEC</div>
+        <div class="s">ZEC on Solana via Zenrock, its own 40% LTV tier.</div>
+      </div>
+      <div class="node core r" style="--d:.75; left:540px; top:0; width:580px; height:540px">
+        <div class="tag" style="color:var(--mint)">Solana &middot; Anchor program</div>
+        <div class="t">HodlPay</div>
+        <ul>
+          <li><b>Vaults</b> &middot; collateral, Pyth prices</li>
+          <li><b>Credit line</b> &middot; on-time ladder, LTV up to +10 pts</li>
+          <li><b>4 installments</b> &middot; 0% interest, every 2 weeks</li>
+          <li><b>LP pool</b> &middot; 1.5% fee split 70 / 20 / 10</li>
+          <li><b>Keeper</b> &middot; collects missed installments</li>
+        </ul>
+      </div>
+      <div class="node sol r" style="--d:1.6; left:1240px; top:0; width:400px">
+        <div class="tag">Merchant &middot; Solana</div>
+        <div class="t">USDC, in full</div>
+        <div class="s">Any Solana Pay QR works. No integration.</div>
+      </div>
+      <div class="node tempo r" style="--d:1.8; left:1240px; top:300px; width:400px">
+        <div class="tag" style="color:var(--tempo)">Merchant &middot; Tempo</div>
+        <div class="t">Stablecoin payout</div>
+        <div class="s">2-of-3 attesters verify each checkout; /audit re-checks every payout.</div>
+      </div>
+    </div>
+    <div class="foot r" style="--d:2.1">
+      <div class="brand">Hodl<i>Pay</i></div>
+      <div class="mono">LIVE ON SOLANA DEVNET &middot; TEMPO MODERATO</div>
+    </div>
+  </section>
+
+  <!-- 3 · Fee split -->
+  <section class="slide" data-n="3">
+    <div class="kicker r">How it makes money</div>
+    <h1 class="r" style="--d:.1">The merchant pays. <em>Half the usual fee.</em></h1>
+    <div class="flow">
+      <div class="price r" style="--d:.4"><div class="k">Purchase</div><div class="v">$1,000</div></div>
+      <div class="paid r" style="--d:.6"><div class="k">Merchant receives today</div><div class="v"><span>$985</span> in stablecoins &middot; fee 1.5%, not ~3%</div></div>
+    </div>
+    <div class="split">
+      <div class="head r" style="--d:.9"><span class="serif">$15 fee, split by the program</span><span class="mono">ENFORCED ON-CHAIN</span></div>
+      <div class="bar3">
+        <div style="--d:1.1; width:70%; background:var(--mint)"></div>
+        <div style="--d:1.35; width:20%; background:var(--ink)"></div>
+        <div style="--d:1.55; width:10%; background:var(--amber)"></div>
+      </div>
+      <div class="legend">
+        <div class="r" style="--d:1.3"><div class="pct" style="color:var(--mint)">70%</div><div class="amt">$10.50</div><div class="who">Liquidity providers who fund every purchase</div></div>
+        <div class="r" style="--d:1.5"><div class="pct">20%</div><div class="amt">$3.00</div><div class="who">HodlPay treasury</div></div>
+        <div class="r" style="--d:1.7"><div class="pct" style="color:var(--amber)">10%</div><div class="amt">$1.50</div><div class="who">First-loss reserve</div></div>
+      </div>
+    </div>
+    <div class="foot r" style="--d:2">
+      <div class="brand">Hodl<i>Pay</i></div>
+      <div class="mono">MISSED INSTALLMENT &rarr; COLLECTED FROM COLLATERAL + 1% LATE FEE</div>
+    </div>
+  </section>
+
+</div>
+<div id="hint">&larr; &rarr; to switch &middot; F for full screen</div>
+<script>
+  const slides = [...document.querySelectorAll(".slide")];
+  const stage = document.getElementById("stage");
+  let i = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1)) || 1) - 1));
+  function fit() {
+    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+  }
+  function show(n) {
+    i = (n + slides.length) % slides.length;
+    slides.forEach((el, k) => el.classList.toggle("on", k === i));
+    history.replaceState(null, "", "#" + (i + 1));
+  }
+  addEventListener("resize", fit);
+  addEventListener("keydown", (e) => {
+    if (["ArrowRight", "PageDown", " "].includes(e.key)) show(i + 1);
+    else if (["ArrowLeft", "PageUp"].includes(e.key)) show(i - 1);
+    else if (/^[1-9]$/.test(e.key)) show(+e.key - 1);
+    else if (e.key === "r") { slides[i].classList.remove("on"); void slides[i].offsetWidth; slides[i].classList.add("on"); }
+    else if (e.key === "f") document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  });
+  addEventListener("click", () => show(i + 1));
+  let t;
+  addEventListener("mousemove", () => { document.body.classList.remove("idle"); clearTimeout(t); t = setTimeout(() => document.body.classList.add("idle"), 1500); });
+  fit(); show(i);
+  t = setTimeout(() => document.body.classList.add("idle"), 1500);
+</script>
+</body>
+</html>
