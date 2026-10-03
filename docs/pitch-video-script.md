@@ -1,31 +1,33 @@
-# Pitch video script (2 to 3 minutes)
+# Pitch video script (final, 2:54)
 
-录制建议：本人出镜 + 幻灯片/产品画面切换，英文讲解，语速放慢。每段括号内是画面提示，台词可按口语习惯微调。目标时长 2:30 到 2:45，超过就删“Why now”里的一句。
+Published: [youtu.be/gja-0pS3VQM](https://youtu.be/gja-0pS3VQM). Feifei is on camera bottom-right for the whole video, over the slides in `pitch-slides.html` and shots from the demo recordings.
 
-核心一句（被问到和 Yumi Finance 的区别时也用这句）：“Yumi underwrites first and hopes; HodlPay lends safely first, then learns.” 视频里不点名 Yumi，差异靠“collateral is the credit check”“1.5%”“on-time raises your limit”“scan any Solana Pay QR”四处体现。最后一处最有杀伤力：Yumi 要商户接 SDK，我们不用商户做任何事。
+Order follows the winning-pitch pattern Colosseum recommends: hook → product (demo footage before 1:00) → business model → why now → team → ask.
+
+核心一句（被问到和 Yumi Finance 的区别时也用这句）：“Yumi underwrites first and hopes; HodlPay lends safely first, then learns.” 视频里不点名 Yumi，差异靠“collateral is the credit check”“1.5%”“on-time raises your limit”“scan any Solana Pay QR”四处体现。
 
 ---
 
-**0:00 – 0:20 · Hook** (face to camera)
+**0:00 – 0:21 · Hook** (slide 4 “You hold crypto. You pay with a bank card.”, then slide 5 title)
 
-"Crypto holders are rich on paper and poor at checkout. If you hold SOL or ZEC and want to buy a $1,200 flight, you have two bad options: sell and pay tax, or borrow against it at a variable rate with no end date. I'm Feifei, and I'm building HodlPay: spend your crypto, keep your crypto."
+"Do you hold crypto, but still pay for everything with your bank card? Your phone, your bills, your morning coffee. To spend your coins, you have to sell them, pay tax, and watch the price go up without you. I'm Feifei, and I'm building HodlPay. Spend your crypto. Keep your crypto."
 
-**0:20 – 1:02 · What it is** (landing page, then Lock / Pay / Repay cards)
+**0:21 – 1:04 · What it is** (demo footage: lock, checkout, repay, Solana Pay scan)
 
-"HodlPay is Buy Now, Pay Later backed by crypto. You lock SOL or zenZEC, Zcash on Solana, and get a stablecoin credit line. At checkout the merchant is paid in full, upfront, in USDC on Solana or in stablecoins on Tempo. You repay in four interest-free installments. Your collateral is the credit check: no selling, no personal data, instant approval anywhere in the world. And every installment you pay on time raises your limit on-chain, so loyal customers need less collateral. It even works at shops that have never heard of us: scan any Solana Pay QR, and the merchant gets a normal USDC payment while you pay in four. Crypto cards already let you spend against collateral, but you pay interest until the loan is closed. We flip that: like Klarna, the merchant pays, and you get a fixed plan at zero percent."
+"HodlPay is Buy Now, Pay Later backed by crypto. You lock SOL or zenZEC, which is Zcash on Solana, and get a stablecoin credit line. At checkout, the merchant is paid in full, upfront, in stablecoins. You repay in four interest-free installments. Your collateral is the credit check: no selling, no personal data, instant approval anywhere. Every installment you pay on time raises your limit on-chain. And it even works at shops that have never heard of us: scan any Solana Pay code, the merchant gets a normal USDC payment, and you pay in four."
 
-**1:02 – 1:37 · Why me** (photo / bullet slide)
+**1:04 – 1:38 · How it makes money** (slide 3 fee split, then overdue collection footage)
 
-"I've built both halves of this before. At Hengchang I launched a BNPL product from zero to over 500,000 users and 10,000 merchants, including the credit, settlement and collections systems. At Babel Finance I designed crypto lending for a platform with over a billion dollars in assets. HodlPay is what happens when you put those two together on-chain."
+"The business model is classic Buy Now, Pay Later, at half the price. Unsecured lenders charge merchants around 3% to cover defaults; we lend safely first, so we charge 1.5%. Every fee is split on-chain: 70% to liquidity providers, 20% to HodlPay, and 10% to a first-loss reserve. And if someone doesn't pay, the protocol collects that installment from their collateral, plus a 1% late fee."
 
-**1:37 – 2:07 · How it makes money** (Lend card, pool stats)
+**1:38 – 2:05 · Why now** (slide 2 architecture, Tempo audit page, zenZEC)
 
-"The business model is classic BNPL, at half the price. Unsecured BNPL has to guess who will repay and charges merchants around 3% to cover the defaults. We lend safely first and learn from repayments, so we charge 1.5%. The program splits every fee: 70% to the liquidity providers who fund purchases, 20% to HodlPay, and 10% to a reserve that absorbs any bad debt before LPs lose a cent. And if someone doesn't pay? No collections agency: three days after a missed installment, the protocol collects exactly that installment from their collateral, plus a 1% late fee."
+"Why now? Stablecoin checkout finally works. Solana gives us instant settlement and Pyth prices for real-time risk. On Tempo, independent attesters verify each checkout, and a public audit page ties every payout back to Solana. And Zcash holders can spend without revealing who they are: no ID, no credit bureau, just collateral."
 
-**2:07 – 2:32 · Why now, why these chains** (architecture slide)
+**2:05 – 2:35 · Why me** (slide 1, then slide 4 again at “I'm also one of these users”)
 
-"Stablecoin checkout finally works. Solana gives us instant, cheap settlement and Pyth prices for real-time risk. Tempo is built for payments, so merchants who want Tempo stablecoins get paid there: independent attesters verify each Solana checkout, and a public audit page ties every Tempo payment back to it. And for ZEC holders: Zcash keeps what you hold private, and HodlPay lets you spend it without handing over who you are. No ID, no credit bureau, just collateral."
+"I've built both halves of this before. At a fintech company, I launched Buy Now, Pay Later from zero to over 500,000 users and 10,000 merchants. And I've worked on many crypto projects, including crypto lending, so I know how collateral and liquidation work on-chain. I'm also one of these users. I hold crypto, but I still pay for everyday life with my bank card. I want spending crypto to be as easy as tapping a card."
 
-**2:32 – 2:52 · Ask** (face to camera)
+**2:35 – 2:54 · Ask** (devnet console footage, then slide 6 close with the live URL)
 
-"The protocol, the Tempo settlement contract and the console are live today. Next: mainnet beta with a capped pool and our first design-partner merchants in travel. BNPL moved over $500 billion of purchases last year. Crypto has the collateral. HodlPay gives it a checkout."
+"HodlPay is live on devnet today. Next: a mainnet beta, with our first merchant partners. Last year, people spent over 500 billion dollars with Buy Now, Pay Later. Crypto has the collateral. HodlPay gives it a checkout."

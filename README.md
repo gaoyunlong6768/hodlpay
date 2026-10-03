@@ -8,6 +8,8 @@ HodlPay is crypto-backed Buy Now, Pay Later. Holders lock SOL or zenZEC (Zcash o
 
 Built for the Colosseum Crypto World's Fair (Solana, Tempo and Zcash tracks).
 
+**Videos:** [Pitch (2:54)](https://youtu.be/gja-0pS3VQM) · [Product demo](https://youtu.be/prB1U2Baa5Q)
+
 ## Try it
 
 **Live on Solana devnet: [hodlpay.vercel.app](https://hodlpay.vercel.app)**

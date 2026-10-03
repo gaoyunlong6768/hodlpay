@@ -92,6 +92,29 @@
   .legend .amt { font-family: "Instrument Serif", serif; font-size: 58px; line-height: 1.05; margin-top: 6px; }
   .legend .who { font-size: 26px; color: var(--ink-soft); line-height: 1.3; margin-top: 6px; }
 
+  /* Slide 4 */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 64px; max-width: 1500px; }
+  .step { background: var(--receipt); box-shadow: 0 1px 0 var(--rule), 0 18px 40px -24px rgba(22,20,15,.35); padding: 34px 38px 40px; border-top: 6px solid var(--ink); }
+  .step .no { font-family: "IBM Plex Mono", monospace; font-size: 22px; letter-spacing: .16em; color: var(--ink-soft); }
+  .step .t { font-family: "Instrument Serif", serif; font-size: 64px; line-height: 1; margin-top: 18px; }
+  .step .s { font-size: 27px; line-height: 1.4; color: var(--ink-soft); margin-top: 16px; }
+  .step.lost { border-top-color: #d2401e; }
+
+  /* Slide 5 */
+  .title { margin: auto 0; }
+  .title .brand { font-size: 150px; line-height: 1; }
+  .title h1 { font-size: 96px; margin-top: 34px; }
+  .title .by { font-family: "IBM Plex Mono", monospace; font-size: 24px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin-top: 44px; }
+
+  /* Slide 6 */
+  .close h1 { font-size: 100px; }
+  .facts { display: flex; gap: 90px; margin-top: 60px; }
+  .facts > div { border-top: 1px dashed var(--rule); padding-top: 20px; min-width: 380px; }
+  .facts .k { font-family: "IBM Plex Mono", monospace; font-size: 21px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); }
+  .facts .v { font-family: "Instrument Serif", serif; font-size: 76px; line-height: 1; margin-top: 12px; }
+  .facts .v small { font-family: "IBM Plex Sans", sans-serif; font-size: 26px; color: var(--ink-soft); display: block; margin-top: 10px; }
+  .url { font-family: "IBM Plex Mono", monospace; font-size: 40px; font-weight: 500; color: var(--mint); }
+
   #hint { position: fixed; right: 18px; top: 14px; font: 13px "IBM Plex Mono", monospace; color: var(--ink-soft); opacity: .7; transition: opacity .4s; }
   body.idle #hint, body.used #hint { opacity: 0; }
 </style>
@@ -105,7 +128,7 @@
     <h1 class="r" style="--d:.1">I&rsquo;ve built both halves<br />of this <em>before.</em></h1>
     <div class="halves">
       <div class="half">
-        <div class="label r" style="--d:.45">Buy Now, Pay Later &middot; Hengchang</div>
+        <div class="label r" style="--d:.45">Buy Now, Pay Later &middot; fintech</div>
         <div class="big r" style="--d:.6">500k+<small>users, zero to launch</small></div>
         <ul>
           <li class="r" style="--d:.85"><span class="mono">10k+</span><span>merchants on the platform</span></li>
@@ -115,11 +138,11 @@
       </div>
       <div class="bar"></div>
       <div class="half">
-        <div class="label r" style="--d:.55">Crypto lending &middot; Babel Finance</div>
-        <div class="big r" style="--d:.7">$1B+<small>AUM platform</small></div>
+        <div class="label r" style="--d:.55">Crypto lending &middot; hands-on</div>
+        <div class="big r" style="--d:.7">Many<small>crypto projects</small></div>
         <ul>
-          <li class="r" style="--d:.95"><span class="mono">Built</span><span>institutional crypto lending</span></li>
-          <li class="r" style="--d:1.1"><span class="mono">20+</span><span>jurisdictions, KYC/AML design</span></li>
+          <li class="r" style="--d:.95"><span class="mono">Built</span><span>crypto lending products</span></li>
+          <li class="r" style="--d:1.1"><span class="mono">Know</span><span>collateral, liquidation, risk</span></li>
         </ul>
       </div>
     </div>
@@ -204,6 +227,42 @@
     <div class="foot r" style="--d:2">
       <div class="brand">Hodl<i>Pay</i></div>
       <div class="mono">MISSED PAYMENT &rarr; COLLECTED FROM COLLATERAL</div>
+    </div>
+  </section>
+
+  <!-- 4 · Problem -->
+  <section class="slide" data-n="4">
+    <div class="kicker r">The problem</div>
+    <h1 class="r" style="--d:.1">You hold crypto.<br /><em>You pay with a bank card.</em></h1>
+    <div class="steps">
+      <div class="step r" style="--d:.6"><div class="no">01 &middot; TO SPEND IT</div><div class="t">Sell your coins</div><div class="s">For your phone, your bills, your morning coffee.</div></div>
+      <div class="step r" style="--d:.9"><div class="no">02 &middot; THEN</div><div class="t">Pay tax</div><div class="s">In many countries, selling is a taxable event.</div></div>
+      <div class="step lost r" style="--d:1.2"><div class="no">03 &middot; AND</div><div class="t">Miss the upside</div><div class="s">The price goes up without you.</div></div>
+    </div>
+    <div class="foot r" style="--d:1.5">
+      <div class="brand">Hodl<i>Pay</i></div>
+    </div>
+  </section>
+
+  <!-- 5 · Title -->
+  <section class="slide" data-n="5">
+    <div class="title">
+      <div class="brand r">Hodl<i>Pay</i></div>
+      <h1 class="r" style="--d:.25">Spend your crypto.<br /><em>Keep your crypto.</em></h1>
+      <div class="by r" style="--d:.5">Buy now, pay later &middot; backed by crypto &middot; Feifei, founder</div>
+    </div>
+  </section>
+
+  <!-- 6 · Close -->
+  <section class="slide close" data-n="6">
+    <div class="kicker r">Live on Solana devnet today</div>
+    <h1 class="r" style="--d:.1">Crypto has the collateral.<br /><em>HodlPay gives it a checkout.</em></h1>
+    <div class="facts">
+      <div class="r" style="--d:.5"><div class="k">Last year</div><div class="v">$500B+<small>spent with Buy Now, Pay Later</small></div></div>
+      <div class="r" style="--d:.7"><div class="k">Next</div><div class="v">Mainnet beta<small>with our first merchant partners</small></div></div>
+    </div>
+    <div class="foot r" style="--d:1">
+      <div class="url">hodlpay.vercel.app</div>
     </div>
   </section>
 
